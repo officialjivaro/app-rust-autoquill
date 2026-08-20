@@ -34,8 +34,10 @@ working features. Internal work packages remain small enough to test and commit 
 - Treat Windows, macOS, X11, and Wayland as separate capability backends.
 - A work package is complete only when its focused tests and the repository quality checks pass.
 - Build directly toward the final Jivaro interaction model; do not create a second disposable UI.
-- When old Python profiles are detected, show a clear Import action. Never import automatically,
-  modify the originals, or block the user from starting without importing.
+- Keep `~/Jivaro/AutoQuill` as the canonical user-data root and `Data/Saves` as the profile folder
+  on Windows, macOS, and Linux.
+- Show legacy profile files in the profile manager without automatically converting, moving, or
+  rewriting them. Loading and upgrading always require explicit user actions.
 - After each completed phase gate, refresh `dist/AutoQuill-windows-x64.exe`, update its SHA-256
   checksum and note, commit to `main`, and push from the normal host user context.
 - Do not publish a broken or partially verified executable merely to keep `/dist` current.
@@ -151,6 +153,8 @@ clearly labelled internal simulation instead of external keystrokes.
 
 ### 1.1 Typed settings and validation
 
+Status: Completed on 2026-08-21
+
 Deliverables:
 
 - Add typed settings, profile, target-mode, shortcut, warning, session-state, and error models.
@@ -236,12 +240,16 @@ Deliverables:
 
 - Define profile schema version 2 with all v0.13 fields and metadata.
 - Keep app preferences separate from profiles.
-- Use the platform data directory for new storage.
-- Detect `~/Jivaro/AutoQuill/Data/Saves` on Windows.
-- Show a dismissible “Existing profiles found” notice with an Import button.
-- Provide an obvious Import action in the profile manager even when no notice is shown.
-- Let the user select profiles, preview names/conflicts, and choose overwrite or keep-both.
-- Never auto-import, modify, move, or delete Python profiles.
+- Use `~/Jivaro/AutoQuill` as the data root on every platform. On Windows this resolves to
+  `C:\Users\<username>\Jivaro\AutoQuill`.
+- Continue using `~/Jivaro/AutoQuill/Data/Saves` for profiles.
+- Discover existing JSON files in place and show them in the normal profile list with a Legacy
+  badge when they lack the current schema version.
+- Load a legacy profile only when the user selects it and presses Load.
+- Prompt before upgrading a legacy profile on Save, then retain a backup of its original bytes.
+- Provide Import for selecting additional profile files from elsewhere, with conflict preview and
+  overwrite/keep-both choices.
+- Never auto-convert, modify, move, or delete Python profiles.
 - Support list, save, load, rename, duplicate, delete, search, default, import, and export.
 - Validate names and prevent traversal or reserved-name problems.
 - Save atomically through a temporary sibling file and replace.
@@ -471,14 +479,14 @@ Also:
 
 The next commits remain small even though the delivery phases are consolidated:
 
-1. `Add typed settings and validation models`
-2. `Port runtime variables and instruction tokenizer`
-3. `Port deterministic scheduler and timing model`
-4. `Add session state machine and fake input backend`
-5. `Add profile storage and deliberate legacy import`
-6. `Build reusable Jivaro controls and functional editor`
-7. `Connect settings, profiles, and simulation to the UI`
-8. `Complete Phase 1 verification and refresh dist`
+- [x] `Add typed settings and validation models`
+- [ ] `Port runtime variables and instruction tokenizer`
+- [ ] `Port deterministic scheduler and timing model`
+- [ ] `Add session state machine and fake input backend`
+- [ ] `Add profile storage and deliberate legacy import`
+- [ ] `Build reusable Jivaro controls and functional editor`
+- [ ] `Connect settings, profiles, and simulation to the UI`
+- [ ] `Complete Phase 1 verification and refresh dist`
 
 Do not begin real Windows injection until item 8 passes. This preserves a portable foundation for
 macOS and Linux while removing the duplicated temporary UI phase.

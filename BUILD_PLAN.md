@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Consolidated plan ready for implementation questions
+Status: Phase 1 implementation in progress
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -338,9 +338,14 @@ Idle -> Preparing -> Countdown -> Typing <-> Paused -> Stopping -> Idle
 
 - Create a versioned profile schema, beginning with `schema_version: 2`.
 - Keep profile data separate from app preferences.
-- Use platform-appropriate user data directories for new installations.
-- On first run, look for the legacy Windows directory `~/Jivaro/AutoQuill/Data/Saves` and offer a one-click import when files are present.
-- Never modify or delete the Python profiles during import.
+- Keep `~/Jivaro/AutoQuill` as the canonical user-data root on every platform. On Windows this is
+  `C:\Users\<username>\Jivaro\AutoQuill`.
+- Continue using `~/Jivaro/AutoQuill/Data/Saves` for profiles so existing files remain easy to find
+  and use.
+- Discover legacy profile JSON in place and show it in the profile manager without automatically
+  converting, moving, or rewriting it.
+- Load legacy profiles only after an explicit user action. Require confirmation before upgrading
+  an old profile on save, and retain a backup of the original file.
 - Validate names and prevent path traversal.
 - Save through a temporary file followed by an atomic replace where supported.
 - Preserve unknown legacy fields during import when practical so downgrading does not unnecessarily destroy data.
@@ -488,3 +493,6 @@ simulation UI before native input is enabled.
 - 2026-08-20: Best-effort, capability-aware behavior approved for platform security restrictions.
 - 2026-08-20: Remaining delivery consolidated from six phases to four to remove duplicate UI work while preserving internal test gates.
 - 2026-08-20: Legacy profiles will never import automatically; detection leads to an easy, explicit Import action.
+- 2026-08-21: All platforms keep the existing `~/Jivaro/AutoQuill` user-data root and
+  `Data/Saves` profile folder instead of migrating to operating-system-specific app-data paths.
+- 2026-08-21: `/dist` is refreshed once after the complete Phase 1 gate, not after each internal work package.

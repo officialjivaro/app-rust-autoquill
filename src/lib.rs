@@ -3,6 +3,8 @@
 //! The crate is deliberately small in Phase 0. Typing behavior will be added behind portable
 //! interfaces so that the UI and platform integrations remain separate.
 
+pub mod domain;
+
 /// Name shown throughout the user interface.
 pub const APP_DISPLAY_NAME: &str = "AutoQuill";
 

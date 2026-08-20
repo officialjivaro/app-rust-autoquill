@@ -7,6 +7,9 @@ Primary stack: Rust + Slint
 
 This document is the implementation contract for porting AutoQuill. Update the checkboxes and decision log as work proceeds, but do not weaken an acceptance criterion without recording why.
 
+The implementation sequence, module contracts, per-phase work packages, and recurring quality
+gates are defined in [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
+
 ## 1. Confirmed product decisions
 
 - Use Rust for application logic and platform integration.

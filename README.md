@@ -6,7 +6,8 @@ with release-size controls and cross-platform CI.
 
 ![AutoQuill Phase 0 shell](docs/phase0-shell.png)
 
-The complete implementation roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md).
+The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package sequence in
+[docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
 
 ## Windows preview
 

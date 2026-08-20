@@ -1,0 +1,37 @@
+[package]
+name = "autoquill"
+version = "0.14.0-alpha.1"
+edition = "2024"
+rust-version = "1.97"
+description = "A compact, cross-platform automatic typing assistant"
+homepage = "https://jivaro.net"
+repository = "https://github.com/officialjivaro/AutoQuill"
+publish = false
+build = "build.rs"
+
+[features]
+default = ["renderer-software"]
+renderer-femtovg = ["slint/renderer-femtovg"]
+renderer-software = ["slint/renderer-software"]
+
+[dependencies]
+slint = { version = "=1.17.1", default-features = false, features = [
+    "accessibility",
+    "backend-winit",
+    "compat-1-2",
+    "std",
+] }
+
+[build-dependencies]
+slint-build = "=1.17.1"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = "symbols"
+
+[profile.release-size]
+inherits = "release"
+opt-level = "z"

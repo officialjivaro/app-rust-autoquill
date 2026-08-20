@@ -1,0 +1,44 @@
+name: Rust CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Format, lint, and test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: clippy,rustfmt
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --all-targets --no-default-features --features renderer-software -- -D warnings
+      - name: Test
+        run: cargo test --no-default-features --features renderer-software
+
+  release-build:
+    name: Release / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libwayland-dev libxkbcommon-dev
+      - name: Build size-focused release
+        run: cargo build --profile release-size --locked --no-default-features --features renderer-software

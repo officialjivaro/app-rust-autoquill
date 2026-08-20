@@ -1,0 +1,32 @@
+export global JivaroTheme {
+    in property <color> background: #0f1113;
+    in property <color> surface: #171a1d;
+    in property <color> surface-raised: #202428;
+    in property <color> border: #34383c;
+    in property <color> border-strong: #4b5055;
+    in property <color> text-primary: #f2f3f1;
+    in property <color> text-secondary: #c8cbcb;
+    in property <color> text-muted: #a7adb3;
+    in property <color> text-disabled: #7a8289;
+    in property <color> accent: #d87341;
+    in property <color> accent-soft: #4a2b20;
+    in property <color> success: #68b989;
+}
+
+export component MetaLabel inherits Text {
+    color: JivaroTheme.text-muted;
+    font-family: "Consolas";
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    vertical-alignment: center;
+}
+
+export component StatusDot inherits Rectangle {
+    in property <color> dot-color: JivaroTheme.accent;
+
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: root.dot-color;
+}

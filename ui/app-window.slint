@@ -1,0 +1,299 @@
+import { AboutSlint } from "std-widgets.slint";
+import { JivaroTheme, MetaLabel, StatusDot } from "theme.slint";
+
+export component AppWindow inherits Window {
+    in property <string> app-version: "0.0.0";
+    in property <string> window-title: "AutoQuill";
+
+    title: root.window-title;
+    icon: @image-url("../assets/icon.png");
+    preferred-width: 920px;
+    preferred-height: 640px;
+    min-width: 760px;
+    min-height: 580px;
+    background: JivaroTheme.background;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 18px;
+
+        header := HorizontalLayout {
+            min-height: 58px;
+            max-height: 58px;
+            spacing: 14px;
+            alignment: center;
+
+            logo-shell := Rectangle {
+                width: 48px;
+                height: 48px;
+                border-radius: 13px;
+                background: JivaroTheme.text-primary;
+                border-width: 1px;
+                border-color: JivaroTheme.border-strong;
+
+                Image {
+                    x: 7px;
+                    y: 7px;
+                    width: 34px;
+                    height: 34px;
+                    source: @image-url("../assets/icon.png");
+                    image-fit: contain;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                alignment: center;
+
+                Text {
+                    text: "AUTOQUILL";
+                    color: JivaroTheme.text-primary;
+                    font-family: "Inter";
+                    font-size: 23px;
+                    font-weight: 800;
+                    letter-spacing: 0.6px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "AUTOMATIC TYPING, BUILT AROUND YOUR FLOW";
+                    color: JivaroTheme.text-muted;
+                    font-family: "Consolas";
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 1px;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+
+            phase-badge := Rectangle {
+                min-width: 186px;
+                max-width: 186px;
+                height: 36px;
+                border-radius: 10px;
+                background: JivaroTheme.surface;
+                border-width: 1px;
+                border-color: JivaroTheme.border;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 9px;
+                    alignment: center;
+
+                    StatusDot { dot-color: JivaroTheme.accent; }
+                    MetaLabel { text: "FOUNDATION BUILD"; }
+                }
+            }
+        }
+
+        body := HorizontalLayout {
+            spacing: 16px;
+            vertical-stretch: 1;
+
+            editor-card := Rectangle {
+                horizontal-stretch: 7;
+                border-radius: 16px;
+                background: JivaroTheme.surface;
+                border-width: 1px;
+                border-color: JivaroTheme.border;
+
+                VerticalLayout {
+                    padding: 22px;
+                    spacing: 14px;
+
+                    MetaLabel { text: "01 / TEXT TO TYPE"; }
+
+                    Text {
+                        text: "Your writing starts here.";
+                        color: JivaroTheme.text-primary;
+                        font-family: "Inter";
+                        font-size: 25px;
+                        font-weight: 750;
+                    }
+
+                    Text {
+                        text: "The portable typing engine and editable text surface arrive in the next milestone.";
+                        color: JivaroTheme.text-secondary;
+                        font-family: "Inter";
+                        font-size: 14px;
+                        wrap: word-wrap;
+                    }
+
+                    draft-surface := Rectangle {
+                        vertical-stretch: 1;
+                        min-height: 215px;
+                        border-radius: 13px;
+                        background: JivaroTheme.background;
+                        border-width: 1px;
+                        border-color: JivaroTheme.border;
+
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 8px;
+
+                            Text {
+                                text: "Type or paste text…";
+                                color: JivaroTheme.text-disabled;
+                                font-family: "Inter";
+                                font-size: 15px;
+                            }
+
+                            Rectangle { vertical-stretch: 1; background: transparent; }
+
+                            Text {
+                                text: "{CLIPBOARD}     {DATE}     {TIME}";
+                                color: JivaroTheme.text-muted;
+                                font-family: "Consolas";
+                                font-size: 11px;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        min-height: 42px;
+                        max-height: 42px;
+                        spacing: 10px;
+                        alignment: center;
+
+                        Text {
+                            text: "0 CHARACTERS  /  0 WORDS";
+                            color: JivaroTheme.text-muted;
+                            font-family: "Consolas";
+                            font-size: 10px;
+                            font-weight: 600;
+                        }
+
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                        start-preview := Rectangle {
+                            min-width: 150px;
+                            max-width: 150px;
+                            height: 42px;
+                            border-radius: 10px;
+                            background: JivaroTheme.accent;
+
+                            Text {
+                                text: "START TYPING";
+                                color: JivaroTheme.background;
+                                font-family: "Inter";
+                                font-size: 12px;
+                                font-weight: 800;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            setup-card := Rectangle {
+                horizontal-stretch: 4;
+                min-width: 285px;
+                border-radius: 16px;
+                background: JivaroTheme.surface;
+                border-width: 1px;
+                border-color: JivaroTheme.border;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+
+                    MetaLabel { text: "02 / SESSION SETUP"; }
+
+                    Text {
+                        text: "Ready for the engine";
+                        color: JivaroTheme.text-primary;
+                        font-family: "Inter";
+                        font-size: 20px;
+                        font-weight: 750;
+                    }
+
+                    Text {
+                        text: "The shell, embedded resources, release profile, and cross-platform build structure are active.";
+                        color: JivaroTheme.text-secondary;
+                        font-family: "Inter";
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: JivaroTheme.border;
+                    }
+
+                    for item[index] in [
+                        { label: "RUST CORE", value: "INITIALIZED" },
+                        { label: "SLINT UI", value: "EMBEDDED" },
+                        { label: "INPUT BACKEND", value: "NEXT PHASE" },
+                        { label: "TARGET", value: "WINDOWS X64" }
+                    ]: Rectangle {
+                        min-height: 48px;
+                        max-height: 48px;
+                        border-radius: 11px;
+                        background: index < 2 ? JivaroTheme.surface-raised : JivaroTheme.background;
+                        border-width: 1px;
+                        border-color: JivaroTheme.border;
+
+                        HorizontalLayout {
+                            padding-left: 13px;
+                            padding-right: 13px;
+                            spacing: 10px;
+                            alignment: center;
+
+                            StatusDot {
+                                dot-color: index < 2 ? JivaroTheme.success : JivaroTheme.text-disabled;
+                            }
+
+                            MetaLabel { text: item.label; }
+                            Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                            Text {
+                                text: item.value;
+                                color: index < 2 ? JivaroTheme.text-secondary : JivaroTheme.text-disabled;
+                                font-family: "Consolas";
+                                font-size: 10px;
+                                font-weight: 700;
+                            }
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+
+                    Text {
+                        text: "No keystrokes are emitted by this build.";
+                        color: JivaroTheme.text-muted;
+                        font-family: "Inter";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+
+        footer := HorizontalLayout {
+            min-height: 40px;
+            max-height: 40px;
+            spacing: 12px;
+            alignment: center;
+
+            AboutSlint {
+                min-width: 120px;
+                max-width: 120px;
+            }
+
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+
+            Text {
+                text: "JIVARO / AUTOQUILL  •  v" + root.app-version;
+                color: JivaroTheme.text-muted;
+                font-family: "Consolas";
+                font-size: 10px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

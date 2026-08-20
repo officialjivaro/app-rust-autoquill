@@ -1,45 +1,58 @@
-# AutoQuill Rust Port — Execution Plan
+# AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Ready for Phase 1 implementation
+Status: Ready for implementation questions
 Last updated: 2026-08-20
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
-This document converts the product roadmap into buildable work packages. It is the day-to-day
-implementation sequence; `BUILD_PLAN.md` remains the source of truth for product behavior, UX, and
-release acceptance.
+This document is the day-to-day build sequence for AutoQuill. It consolidates the six remaining
+roadmap phases into four delivery phases so working product slices arrive sooner without removing
+verification gates.
 
-## 1. Delivery rules
+## 1. Faster delivery strategy
+
+The original plan separated portable logic, a temporary parity UI, Windows integration,
+cross-platform integration, final UI redesign, and packaging. That was safe but repeated too much
+UI work. The revised sequence is:
+
+| Phase | Outcome | Consolidates |
+|---|---|---|
+| 1. Portable product alpha | Tested core, profiles, and modern Jivaro UI using safe simulation | Old Phases 1, 2, and most of 5 |
+| 2. Windows beta | Real Windows input, shortcuts, sticky targeting, and portable EXE | Old Phase 3 plus Windows product polish |
+| 3. macOS and Linux expansion | Native platform backends, permissions, and artifacts | Old Phase 4 plus platform onboarding |
+| 4. Release hardening | Final accessibility, packaging, updates, diagnostics, and release automation | Remaining old Phases 5 and 6 |
+
+This removes the throwaway plain UI. The final Jivaro components are built incrementally alongside
+working features. Internal work packages remain small enough to test and commit independently.
+
+## 2. Delivery rules
 
 - Keep one Cargo package and one raw executable per operating system and architecture.
 - Keep UI, portable domain logic, and operating-system integrations in separate modules.
 - Never test real keyboard injection in the default automated test suite.
 - Complete portable parity with a fake input backend before enabling native injection.
-- Add dependencies only in the phase that needs them, disable unused default features, and record
-  the release-size change.
-- Treat Windows, macOS, X11, and Wayland as separate capability backends rather than pretending
-  they behave identically.
-- A work package is complete only when formatting, strict Clippy, unit tests, the optimized build,
-  and the hidden smoke test pass.
+- Add dependencies only when needed, disable unused default features, and measure size changes.
+- Treat Windows, macOS, X11, and Wayland as separate capability backends.
+- A work package is complete only when its focused tests and the repository quality checks pass.
+- Build directly toward the final Jivaro interaction model; do not create a second disposable UI.
+- When old Python profiles are detected, show a clear Import action. Never import automatically,
+  modify the originals, or block the user from starting without importing.
 - After each completed phase gate, refresh `dist/AutoQuill-windows-x64.exe`, update its SHA-256
-  checksum and distribution note, commit the verified source and artifact to `main`, and push from
-  the normal host user context.
+  checksum and note, commit to `main`, and push from the normal host user context.
 - Do not publish a broken or partially verified executable merely to keep `/dist` current.
 
-## 2. Planned source layout
+## 3. Planned source layout
 
 ```text
 src/
 ├── main.rs
 ├── app.rs
 ├── domain/
-│   ├── mod.rs
 │   ├── settings.rs
 │   ├── profile.rs
 │   ├── session.rs
 │   ├── shortcut.rs
 │   └── warning.rs
 ├── typing/
-│   ├── mod.rs
 │   ├── instruction.rs
 │   ├── templating.rs
 │   ├── tokenizer.rs
@@ -48,13 +61,11 @@ src/
 │   ├── engine.rs
 │   └── fake_backend.rs
 ├── platform/
-│   ├── mod.rs
 │   ├── capabilities.rs
 │   ├── windows/
 │   ├── macos/
 │   └── linux/
 ├── persistence/
-│   ├── mod.rs
 │   ├── profile_store.rs
 │   ├── preferences.rs
 │   └── legacy_import.rs
@@ -75,14 +86,15 @@ tests/
 └── session_scenarios.rs
 ```
 
-Not every file must be created immediately. Add modules as their work package begins so the
-project stays understandable throughout the port.
+Create modules only as their work package starts. “Single executable” applies to the artifact, not
+to the number of source files.
 
-## 3. Core contracts to establish first
+## 4. Core contracts
 
 ### Input backend
 
-The portable engine receives an injected backend with operations equivalent to:
+The portable engine owns no Slint or operating-system objects. It receives a backend with logical
+operations equivalent to:
 
 ```text
 capabilities() -> CapabilityReport
@@ -93,23 +105,22 @@ emit_special_key(SpecialKey) -> Result
 detach_target()
 ```
 
-The fake backend records operations in memory. Native backends must return typed failures; they
-must never silently report success after dropping input.
+The Phase 1 backend records operations in memory and drives an internal simulation preview. Native
+backends return typed failures and never silently claim success after dropping input.
 
-### Time and randomness
+### Time, randomness, and runtime data
 
-The engine receives abstractions for:
+Inject these dependencies:
 
-- Monotonic time.
-- Interruptible waits.
-- Current local date and time for runtime variables.
-- Random integer, float, and typo-character selection.
+- Monotonic time and interruptible waits.
+- Local date and time.
 - Clipboard text.
+- Random integer, float, and typo-character selection.
 
-Production adapters use the operating system. Tests use manual time and seeded randomness, so no
-test relies on wall-clock sleeps or nondeterministic output.
+Production adapters use platform services. Tests use manual time and seeded randomness, so core
+tests never wait on wall-clock time and never produce nondeterministic output.
 
-### Session commands and events
+### Session model
 
 Commands:
 
@@ -122,33 +133,27 @@ Reset
 Shutdown
 ```
 
-Events:
+States:
 
 ```text
-Preparing
-Countdown
-Started
-Progress
-Paused
-Resumed
-TargetChanged
-Warning
-Completed
-Stopped
-Failed
+Idle -> Preparing -> Countdown -> Typing <-> Paused -> Stopping -> Idle
+                                       \-> Completed -> Idle
+                                       \-> Failed -> Idle
 ```
 
-Every event carries a session identifier. The UI ignores events belonging to an older session.
+Events cover state, progress, target, warning, completion, and failure. Every event carries a
+session identifier so stale worker output cannot mutate a newer session.
 
-## 4. Phase 1 — Portable core parity
+## 5. Phase 1 — Portable product alpha
 
-Goal: reproduce AutoQuill v0.13 behavior without Slint or real operating-system input.
+Goal: deliver a polished, safe, useful application that exercises all portable behavior using a
+clearly labelled internal simulation instead of external keystrokes.
 
-### 1.1 Domain models and validation
+### 1.1 Typed settings and validation
 
 Deliverables:
 
-- Create typed settings, profile, target-mode, shortcut, warning, session-state, and error models.
+- Add typed settings, profile, target-mode, shortcut, warning, session-state, and error models.
 - Preserve these v0.13 defaults:
 
 | Setting | Default | Validation |
@@ -166,19 +171,17 @@ Deliverables:
 | Short pause interval | 120–250 characters | Normalize reversed range; minimum 1 |
 | Short pause duration | 0.6–1.8 s | Normalize reversed range; minimum 0 |
 
-- Port the current warning rules for very high WPM, short stop-after values, reversed ranges,
-  empty looping text, and sticky-target behavior.
-- Ensure settings validation exists independently of UI controls.
+- Port warnings for high WPM, very short stop-after, reversed ranges, empty loop text, and sticky
+  targeting.
+- Keep validation out of Slint callbacks.
 
 Tests:
 
-- Every default and boundary value.
-- Invalid numeric input falls back safely.
-- Reversed ranges normalize in one documented direction.
-- Legacy target-mode values map to the intended current behavior.
-- Warning output is stable and human-readable.
+- Defaults, minimums, maximums, invalid input, and reversed ranges.
+- WPM-to-delay conversion.
+- Legacy target values and warning rules.
 
-Gate: settings can round-trip through typed Rust values without a UI or JSON file.
+Gate: settings round-trip through typed Rust values without a UI or JSON file.
 
 ### 1.2 Runtime variables and instruction compiler
 
@@ -186,329 +189,266 @@ Deliverables:
 
 - Add `Instruction::Character(char)` and `Instruction::SpecialKey(SpecialKey)`.
 - Port `{CLIPBOARD}`, `{DATE}`, and `{TIME}` with injectable providers.
-- Preserve literal runtime-token escaping: `""{TOKEN}""` emits `{TOKEN}`.
-- Port `[NAME]` and `[NAME*COUNT]` special-key parsing.
-- Preserve literal special-key escaping: `""[NAME]""` emits `[NAME]` as text.
-- Normalize CRLF, CR, and LF to a single Enter instruction.
-- Support the existing key names and aliases:
-  Enter, Tab, Backspace, Space/Spacebar, Esc/Escape, Ctrl, Shift, Alt, Caps Lock, Num Lock,
-  Scroll Lock, Pause, Insert, Delete, Print Screen, Home, End, Page Up, Page Down, arrows,
-  Windows keys, Apps, F1–F12, and numeric keypad keys.
-- Keep unknown placeholders and key-looking text literal.
-- Count progress using intended character instructions only, matching v0.13.
+- Preserve `""{TOKEN}""` and `""[NAME]""` literal escapes.
+- Port `[NAME]` and `[NAME*COUNT]`.
+- Normalize CRLF, CR, and LF to Enter.
+- Preserve existing key names and aliases: Enter, Tab, Backspace, Space, Escape, modifiers,
+  locks, navigation, arrows, Windows keys, Apps, F1–F12, and keypad keys.
+- Keep unknown placeholders and key-like text literal.
+- Count intended character instructions for progress, excluding special keys and simulated errors.
 
 Tests:
 
-- Empty, ASCII, Unicode, combining characters, non-Latin text, and emoji.
-- Known and unknown runtime variables.
-- Escaped variables and special keys.
-- Special-key repetition, aliases, malformed counts, and newline normalization.
+- ASCII, Unicode, combining characters, non-Latin text, and emoji.
+- Known, unknown, malformed, repeated, and escaped tokens.
 - Clipboard/date/time values supplied by fakes.
+- Fixture parity with the Python compiler.
 
-Gate: Python and Rust fixture cases compile to the same logical instruction stream.
+Gate: Rust and Python fixtures produce the same logical instruction stream.
 
-### 1.3 Scheduling, timing, and humanization
-
-Deliverables:
-
-- Port WPM-to-delay calculation and 0.8–1.2 per-token variance.
-- Port word-unit break scheduling and the current punctuation boundaries.
-- Port short pauses after randomized character counts.
-- Port simulated errors: randomized characters followed by matching Backspace instructions.
-- Port break/pause compensation with its 5 ms minimum effective delay.
-- Port loop wait selection and “loop wins” break-scheduler reset behavior.
-- Represent all waits as interruptible scheduled actions rather than direct `sleep` calls.
-
-Tests:
-
-- Seeded sequences produce exact expected delays and typo operations.
-- Breaks occur only on word boundaries; special keys count as documented units.
-- Error characters do not advance intended progress.
-- Loop wait resets progress and break counters.
-- Compensation matches Python fixtures within a documented floating-point tolerance.
-
-Gate: a deterministic simulator produces the expected operation timeline for representative runs.
-
-### 1.4 Session state machine and fake backend
+### 1.3 Deterministic scheduling and session engine
 
 Deliverables:
 
-- Implement `Idle -> Preparing -> Countdown -> Typing <-> Paused -> Stopping` and terminal states.
-- Guarantee one active worker and reject a second Start command safely.
+- Port WPM delay and 0.8–1.2 token variance.
+- Port word-unit breaks, short pauses, simulated errors, and matching Backspaces.
+- Port break/pause compensation with its 5 ms minimum delay.
+- Port loops, loop waits, and “loop wins” scheduler reset behavior.
+- Implement the explicit session state machine and one-worker rule.
 - Exclude paused time from stop-after accounting.
-- Check cancellation during countdown, per-token delay, simulated pauses, breaks, errors, and loop waits.
-- Target a Stop-to-no-more-output latency below 100 ms.
-- Publish typed events for progress, ETA inputs, state, warnings, target failure, and completion.
-- Add an in-memory backend that records every character and key operation.
+- Check cancellation during every countdown, delay, pause, break, error, and loop wait.
+- Target less than 100 ms from Stop to no more output.
+- Add an in-memory backend and manual clock.
 
 Tests:
 
-- Table-driven command/state transitions.
-- Stop and pause at every wait boundary.
-- Stop-after while typing, paused, and between loops.
-- Stale session events cannot mutate the current session.
-- Backend failure produces one Failed event and no later output.
+- Seeded operation timelines.
+- Break boundary and special-key unit behavior.
+- Pause, resume, stop-after, loop reset, and cancellation at every wait boundary.
+- No progress increase for simulated typo characters.
+- One terminal failure event and no later output after backend failure.
 
-Gate: full sessions run to completion under manual time without emitting real keystrokes.
+Gate: full sessions complete deterministically under manual time without external keystrokes.
 
-### 1.5 Versioned profiles and legacy import
+### 1.4 Profiles and easy manual import
 
 Deliverables:
 
-- Define profile schema version 2 with all v0.13 fields plus metadata.
-- Keep app preferences separate from typing profiles.
-- Use the platform data directory for new files.
-- Detect `~/Jivaro/AutoQuill/Data/Saves` on Windows and offer non-destructive import.
-- Preserve unknown legacy fields in an extension map when possible.
-- Reject empty names, invalid filename characters, separators, traversal, reserved names, and
-  collisions according to an explicit overwrite policy.
-- Save by writing a temporary sibling file, flushing it, and atomically replacing the destination.
-- Support list, save, load, rename, duplicate, delete, import, export, search, and default profile.
+- Define profile schema version 2 with all v0.13 fields and metadata.
+- Keep app preferences separate from profiles.
+- Use the platform data directory for new storage.
+- Detect `~/Jivaro/AutoQuill/Data/Saves` on Windows.
+- Show a dismissible “Existing profiles found” notice with an Import button.
+- Provide an obvious Import action in the profile manager even when no notice is shown.
+- Let the user select profiles, preview names/conflicts, and choose overwrite or keep-both.
+- Never auto-import, modify, move, or delete Python profiles.
+- Support list, save, load, rename, duplicate, delete, search, default, import, and export.
+- Validate names and prevent traversal or reserved-name problems.
+- Save atomically through a temporary sibling file and replace.
 
 Tests:
 
-- Round-trip every settings field.
-- Import representative valid, partial, malformed, and future-field legacy JSON fixtures.
-- Atomic save failure leaves the previous profile readable.
-- Profile names cannot escape the profile directory.
-- Import never modifies or deletes the Python source profile.
+- Schema round-trip and representative v0.13 fixtures.
+- Partial, malformed, conflicting, and future-field files.
+- Atomic-save failure preserves the previous file.
+- Profile paths cannot escape the profile directory.
+- Import leaves original Python files byte-for-byte unchanged.
 
-Gate: fixture copies of v0.13 profiles import and re-open as schema version 2 without losing
-supported behavior.
+Gate: users can deliberately import legacy profiles in a few clear steps without automatic data
+changes.
 
-### 1.6 Phase 1 application integration
+### 1.5 Modern Jivaro application UI
 
-Deliverables:
+Build the actual product interface now instead of a temporary parity screen:
 
-- Connect the existing Slint shell to the portable session controller and fake backend.
-- Make the editor, Start, Pause/Resume, Stop, Reset, progress, status, and error states functional.
-- Display a visible “Simulation — no external keystrokes” capability label.
-- Keep all advanced settings available through programmatic models even if the final controls are
-  not built until Phase 2.
-- Add Windows/macOS/Linux CI jobs for core tests and optimized compile checks.
-- Record release size and warm smoke timing after the new dependencies are linked.
+- Real multiline editor, character/word counts, token insertion menu, and clear action.
+- WPM slider and numeric input.
+- Shortcut recorder model and displayed shortcut; native registration waits for Phase 2.
+- Plain-language target intent and startup delay.
+- Persistent session bar with Start, Pause/Resume, Stop, Reset, state, progress, and ETA.
+- Collapsible advanced controls for stop-after, loops, breaks, pauses, and errors.
+- Contextual validation beside the relevant control.
+- Profile quick switch and complete profile manager.
+- Visible “Simulation mode — no external keystrokes” status.
+- Internal output preview showing what the fake backend would type.
+- Responsive minimum width, logical focus order, accessible names, and visible focus states.
 
-Gate: a user can run, pause, resume, stop, reset, and complete a simulated session in the app;
-automated tests demonstrate v0.13 core parity.
+UI boundaries:
 
-## 5. Phase 2 — Functional parity UI
+- Slint sends typed commands and renders typed events.
+- UI callbacks contain no parser, scheduler, persistence, or platform logic.
+- Worker events return through the Slint event loop and never mutate UI objects directly.
 
-Goal: expose every portable feature before native input and final visual polish.
+Gate: every portable v0.13 feature can be configured, saved, simulated, paused, resumed, stopped,
+reset, and inspected through the modern UI.
 
-### Work packages
+### 1.6 Phase 1 verification and artifact
 
-1. Replace static preview elements with a real multiline editor, counts, token menu, and clear flow.
-2. Add WPM slider/numeric input, shortcut recorder, target intent, and startup delay to the main
-   flow.
-3. Add a persistent session bar with state text, progress, typed/total count, ETA, active target,
-   Start, Pause/Resume, Stop, and Reset.
-4. Add collapsible advanced controls for stop-after, loops, breaks, pauses, and errors; show
-   dependent fields only when enabled.
-5. Add contextual validation and warnings beside the affected controls.
-6. Add profile quick switch and the complete profile manager.
-7. Add capability and permission surfaces driven by the platform report.
-8. Add non-blocking update-check state using a fake transport first.
-9. Add accessible names, keyboard focus order, logical tab navigation, and visible focus styling as
-   components are created.
+- Run core parity, migration, session scenario, UI-state, and smoke tests.
+- Compile on native Windows, macOS, and Linux CI runners.
+- Test the window at 100%, 125%, 150%, and 200% scaling.
+- Record Windows raw size and warm startup time.
+- Refresh `/dist` only after the optimized Windows simulation build passes.
 
-Verification:
+Phase 1 gate: a first-time user can paste text, choose speed, simulate a full run, manage profiles,
+and understand that no external input has occurred.
 
-- Each setting can be entered, saved, loaded, and included in a Start snapshot.
-- Invalid input is explained and cannot start an unsafe or ambiguous session.
-- UI callbacks do not contain domain validation or platform-specific code.
-- The fake backend still remains the default while testing this phase.
-- Window remains usable at the minimum supported size and 100%, 125%, 150%, and 200% scaling.
+## 6. Phase 2 — Windows feature-complete beta
 
-Gate: the Rust UI exposes every v0.13 user-facing behavior, excluding real input and documented
-platform limitations.
+Goal: replace simulation with verified Windows input while keeping Simulation available as a safe
+test mode.
 
-## 6. Phase 3 — Windows backend parity
+### 2.1 Native foundation
 
-Goal: make the Windows build safe for beta use and retire no Python behavior prematurely.
-
-### 3.1 Native API foundation
-
-- Use narrowly enabled Microsoft `windows-sys` bindings for Win32 APIs.
+- Use narrowly enabled Microsoft `windows-sys` bindings.
 - Add RAII wrappers for HWND/process handles, attached thread input, and timer resolution.
-- Keep Win32 constants and virtual-key mapping inside the Windows backend.
-- Add compile-time `cfg(windows)` boundaries so no Windows dependency enters macOS/Linux builds.
+- Keep Win32 constants and virtual keys inside `cfg(windows)` modules.
 
-### 3.2 Foreground input
+### 2.2 Foreground input
 
-- Port `SendInput` Unicode injection, including characters requiring UTF-16 surrogate pairs.
+- Port `SendInput` Unicode, including UTF-16 surrogate pairs.
 - Port special-key down/up pairs and extended-key flags.
-- Return detailed OS errors and stop the active session after the first terminal failure.
+- Return detailed errors and stop after the first terminal input failure.
 
-### 3.3 Sticky target behavior
+### 2.3 Sticky Auto targeting
 
-- Capture the focused child HWND and root window at Start.
-- Record window title, class, process identity, and browser-like classification.
-- Use `PostMessageW` for verified classic native controls.
-- Promote browser/custom controls to foreground assist when background messages are unreliable.
-- Stop when a browser-assist target loses focus; never repeatedly steal focus.
-- Detect closed/replaced targets before every emitted operation.
+- Capture focused child HWND and root window at Start.
+- Record title, class, process, and browser-like classification.
+- Use `PostMessageW` only for verified classic controls.
+- Promote browser/custom controls to foreground assist.
+- Stop when browser focus is lost; never repeatedly steal focus.
+- Validate targets before every operation and explain closure/replacement.
 
-### 3.4 Global shortcuts
+### 2.4 Global shortcuts and Windows product integration
 
-- Implement modifier shortcut registration with native Win32 registration first.
+- Register modifier shortcuts through native Win32 APIs first.
 - Preserve F1–F12 behavior.
-- Evaluate an active-session-only keyboard hook for Escape or unsupported combinations; do not
-  install a broad permanent hook by default.
-- Report registration conflicts and provide a visible fallback.
+- Evaluate an active-session-only hook for Escape or unsupported shortcuts.
+- Report shortcut conflicts and keep visible UI controls available.
+- Add Windows permission/capability messaging, tray actions where reliable, icon, version metadata,
+  and portable artifact naming.
 
-### 3.5 Verification matrix
+### 2.5 Windows matrix
 
-- Automated backend contract tests use recorded Win32 call adapters where practical.
-- Real-input tests run only under an explicit ignored/manual test target.
-- Manual targets: Notepad, WordPad-equivalent native control, VS Code, Chrome, Edge, Firefox, and
-  common single-line/multiline web fields.
-- Cover ASCII, non-Latin text, emoji, all special-key aliases, long text, focus loss, target close,
-  pause/resume, Escape, loop, and Stop latency.
-- Compare behavior side by side with Python v0.13.
+- Real-input tests are explicit/manual and never part of default `cargo test`.
+- Test Notepad, VS Code, Chrome, Edge, Firefox, and common form fields.
+- Cover ASCII, non-Latin text, emoji, special keys, long text, focus loss, closed targets,
+  pause/resume, Escape, loops, and Stop latency.
+- Compare against Python v0.13 before declaring parity.
 
-Gate: the Windows parity checklist passes, release size remains under the agreed target, and the
-updated portable executable replaces `/dist` only after smoke and clean-machine checks.
+Phase 2 gate: Windows passes the parity matrix, the raw executable remains within the size target,
+and the verified beta replaces `/dist`.
 
-## 7. Phase 4 — macOS and Linux backends
+## 7. Phase 3 — macOS and Linux expansion
 
-This phase has three independent gates. A passing backend can ship while another remains marked
-limited; the UI must never claim unavailable capabilities.
+Each backend has an independent gate. The UI advertises only proven capabilities.
 
-### 4A. macOS
+### 3A. macOS
 
-- Build native Apple Silicon and Intel artifacts independently before attempting Universal 2.
-- Implement foreground character/key events through supported Core Graphics APIs.
-- Detect Accessibility/Input Monitoring permission state and provide request, instructions, and a
-  re-check action.
-- Implement signed-app-compatible global shortcuts.
-- Investigate target-specific Accessibility delivery as a separate capability; do not block
-  foreground typing on it.
-- Test TextEdit, Notes, Safari, Chrome, Firefox, common form fields, non-Latin text, emoji,
-  permission denial/revocation, sleep/wake, and shortcut collision.
+- Build Apple Silicon and Intel separately before Universal 2.
+- Implement foreground characters and keys through supported Core Graphics APIs.
+- Detect Accessibility/Input Monitoring permission state with instructions and Re-check.
+- Implement signed-app-compatible shortcuts.
+- Investigate Accessibility target delivery as optional; do not block foreground typing on it.
+- Test TextEdit, Notes, Safari, Chrome, Firefox, Unicode, emoji, permission denial/revocation,
+  sleep/wake, and shortcut conflicts.
 
-Gate: both architectures complete a real foreground session and handle denied permissions without
-false success.
+Gate: both architectures complete real sessions and permission failures never show false success.
 
-### 4B. Linux X11
+### 3B. Linux X11
 
 - Detect the display session at runtime.
-- Prototype a maintained X11 input implementation behind the platform trait.
-- Prototype X11 global shortcuts separately.
-- Treat background targeting as experimental until application-specific tests pass.
-- Test Ubuntu GNOME X11 and KDE Plasma X11 with native editors and Chromium/Firefox fields.
+- Prototype maintained X11 input and global shortcuts behind platform traits.
+- Keep background targeting experimental until application-specific tests pass.
+- Test Ubuntu GNOME X11 and KDE Plasma X11 with native editors and browsers.
 
-Gate: foreground typing and shortcuts work on both tested X11 desktops with useful dependency and
-session diagnostics.
+Gate: foreground typing and shortcuts work across the tested X11 desktops with useful diagnostics.
 
-### 4C. Linux Wayland
+### 3C. Linux Wayland
 
-- Use the desktop Global Shortcuts portal when the compositor provides it.
-- Prototype Remote Desktop portal/libei input with explicit user consent.
-- Keep experimental Wayland/libei support isolated behind Cargo features until the compositor
-  matrix is reliable.
+- Use the desktop Global Shortcuts portal when available.
+- Prototype Remote Desktop portal/libei input with explicit consent.
+- Isolate experimental Wayland/libei support behind Cargo features until reliable.
 - Never promise arbitrary background targeting.
-- Provide visible Start/Stop controls and copy-to-clipboard guidance when the required portal is
-  unavailable.
+- Provide visible controls and copy-to-clipboard guidance if required portals are unavailable.
 - Test Ubuntu GNOME Wayland and KDE Plasma Wayland independently.
 
-Gate: supported portal sessions type successfully after consent; unsupported environments explain
-the limitation before Start.
+Gate: supported portals type after consent; unsupported environments explain limitations before
+Start.
 
-### Dependency decision checkpoint
+### Dependency checkpoint
 
-- `global-hotkey` is a candidate for macOS and X11, but not Wayland; its event-loop constraints
-  must be proven with Slint before adoption.
-- `enigo` is a prototype candidate for macOS/X11 and optional Linux implementations. Its Wayland
-  and libei paths remain experimental, so the portable engine must not depend on it directly.
-- `ashpd` is the preferred portal client candidate for Wayland Global Shortcuts and Remote Desktop.
-- Windows keeps a native backend because AutoQuill requires behavior beyond a generic input crate.
-- Pin exact selected versions and features only after each spike passes size, license, event-loop,
-  and behavior tests.
+- `global-hotkey` is a macOS/X11 candidate, not a Wayland solution. Prove its event-loop behavior
+  with Slint before adoption.
+- `enigo` is a prototype candidate for macOS/X11. Its Wayland/libei paths remain experimental, so
+  the portable engine never depends on it directly.
+- `ashpd` is the preferred portal-client candidate for Wayland Global Shortcuts and Remote Desktop.
+- Windows remains native because AutoQuill needs behavior beyond generic input libraries.
+- Pin selected versions and features only after size, license, event-loop, and behavior spikes.
 
-Current primary references for the dependency spikes:
+Primary references:
 
-- [`global-hotkey` platform support and event-loop notes](https://docs.rs/global-hotkey/latest/global_hotkey/)
-- [`enigo` platform features and experimental Wayland/libei notice](https://docs.rs/crate/enigo/latest)
-- [`ashpd` Global Shortcuts portal API](https://docs.rs/ashpd/latest/ashpd/desktop/global_shortcuts/)
-- [`ashpd` Remote Desktop portal API](https://docs.rs/ashpd/latest/ashpd/desktop/remote_desktop/struct.RemoteDesktop.html)
-- [Microsoft `windows-rs` repository and binding guidance](https://github.com/microsoft/windows-rs)
+- [`global-hotkey` platform and event-loop notes](https://docs.rs/global-hotkey/latest/global_hotkey/)
+- [`enigo` platforms and experimental Wayland/libei notice](https://docs.rs/crate/enigo/latest)
+- [`ashpd` Global Shortcuts](https://docs.rs/ashpd/latest/ashpd/desktop/global_shortcuts/)
+- [`ashpd` Remote Desktop](https://docs.rs/ashpd/latest/ashpd/desktop/remote_desktop/struct.RemoteDesktop.html)
+- [Microsoft `windows-rs`](https://github.com/microsoft/windows-rs)
 
-## 8. Phase 5 — Final Jivaro UX
+Phase 3 gate: every published platform completes onboarding and a real session, with unsupported
+capabilities stated before Start.
 
-Goal: turn the parity UI into the polished everyday product without hiding power features.
+## 8. Phase 4 — Release hardening
 
-### Work packages
+Goal: turn proven platform builds into repeatable, trustworthy releases.
 
-1. Expand `theme.slint` into semantic Dark, Light, and System token sets.
-2. Build reusable field, toggle, slider, button, card, chip, banner, tooltip, modal, menu, progress,
-   and focus-ring components.
-3. Implement the final editor-first main window and responsive narrow layout.
-4. Add first-run onboarding: explanation, permission check, shortcut choice, and internal safe
-   typing test.
-5. Refine progressive disclosure for advanced settings and contextual warnings.
-6. Finish profile search, dirty state, duplicate, rename, import/export, delete confirmation, and
-   default selection.
-7. Add tray controls where the platform reports reliable support.
-8. Add reduced motion, keyboard-only flows, accessible labels, screen-reader smoke checks, and
-   contrast verification.
-9. Run task-based usability passes for first-time, occasional, and power users.
+### Final product pass
 
-Required usability scenarios:
+- Finish Dark, Light, and System themes.
+- Complete keyboard-only navigation, screen-reader smoke tests, contrast, scaling, and reduced
+  motion.
+- Finish tray behavior per platform.
+- Run task-based usability passes for first-time, occasional, and power users.
+- Resolve permission, target-loss, shortcut-conflict, profile-conflict, and dirty-state recovery.
 
-- First launch to successful internal test without documentation.
-- Paste text, change speed, select a target, and start.
-- Pause and stop during a long wait.
-- Recover from missing permission, target loss, and shortcut conflict.
-- Save a profile, switch profiles, edit it, and resolve dirty state.
-- Find every advanced v0.13 option without cluttering the default workflow.
+### Artifacts
 
-Gate: a first-time user completes a successful run without documentation, and all critical flows
-work with keyboard-only navigation at supported scaling levels.
+- Windows raw portable EXE plus optional installer.
+- macOS `.app` and DMG; Apple Silicon/Intel and Universal 2 when proven.
+- Linux raw x64 executable and AppImage.
+- Generate SHA-256 checksums, artifact manifest, dependency licenses, and size report.
 
-## 9. Phase 6 — Packaging and release hardening
+### Signing and trust
 
-### 6.1 Artifact production
+- Add Windows code signing when credentials exist.
+- Add macOS Developer ID signing, hardened runtime, and notarization when credentials exist.
+- Document unsigned development builds without presenting them as production releases.
+- Run clean-machine and antivirus false-positive checks.
 
-- Windows: raw portable EXE in `/dist`, version metadata/icon, optional installer as a separate
-  artifact.
-- macOS: `.app`, DMG, Apple Silicon and Intel builds, then Universal 2 if validated.
-- Linux: raw x64 executable and AppImage.
-- Generate SHA-256 checksums, an artifact manifest, dependency license inventory, and release-size
-  report.
+### Updates and diagnostics
 
-### 6.2 Signing and trust
+- Check GitHub Releases asynchronously.
+- Compare semantic versions and show release notes.
+- Require user action to download; never silently replace the executable.
+- Add bounded local diagnostics with Copy and Export.
+- Never log typed text, clipboard data, or injected characters.
 
-- Add Windows code signing when credentials are available.
-- Add macOS Developer ID signing, hardened runtime, and notarization when credentials are
-  available.
-- Document unsigned development behavior without presenting it as a production release.
-- Run clean-machine and antivirus false-positive checks before stable publication.
+### Release automation
 
-### 6.3 Updates and diagnostics
-
-- Check GitHub Releases asynchronously after startup.
-- Compare semantic versions and expose release notes.
-- Require a user action to download; never silently replace the running executable.
-- Add bounded, crash-safe local diagnostics with Copy and Export actions.
-- Do not log typed text, clipboard contents, or injected characters.
-
-### 6.4 CI release flow
-
-1. Format, strict Clippy, unit tests, and core scenario tests.
-2. Compile all platform/architecture targets on native runners.
+1. Format, strict Clippy, unit tests, scenario tests, and platform contract tests.
+2. Compile platform/architecture targets on native runners.
 3. Run platform smoke tests.
-4. Build optimized raw artifacts with one renderer per artifact.
-5. Measure size and compare against the recorded threshold.
+4. Build one optimized renderer/backend combination per artifact.
+5. Measure size and compare to thresholds.
 6. Generate checksums, manifests, notices, and bundles.
 7. Sign/notarize when credentials exist.
-8. Publish an alpha/beta release only from a reviewed version tag.
+8. Publish alpha/beta/stable only from a reviewed version tag.
 
-Gate: all advertised artifacts pass clean-machine startup, permission, typing, migration, upgrade,
-and uninstall checks.
+Phase 4 gate: every advertised artifact passes clean-machine startup, permissions, typing,
+migration, upgrade, and uninstall checks.
 
-## 10. Quality gates used for every work package
+## 9. Quality gates
 
-Run from `rust_autoquill`:
+Run for each work package:
 
 ```text
 cargo fmt --check
@@ -517,35 +457,36 @@ cargo test --locked
 cargo build --profile release-size --locked
 ```
 
-Additionally:
+Also:
 
-- Run the hidden `AUTOQUILL_SMOKE_TEST=1` executable check.
-- Run `git diff --check` before every commit.
+- Run the hidden `AUTOQUILL_SMOKE_TEST=1` check.
+- Run `git diff --check` before committing.
 - Audit `cargo tree -e features` when dependencies change.
-- Record raw executable bytes after each phase gate.
-- Verify the `/dist` executable hash matches the just-built release artifact.
-- Confirm `main` and `origin/main` point to the same commit after an authorized push.
+- Record executable bytes at each phase gate.
+- Verify `/dist` hashes against the just-built artifact.
+- Confirm local and remote `main` match after an authorized push.
+- If a dependency adds more than 1 MiB to the Windows raw executable, justify or replace it.
 
-## 11. Immediate implementation order
+## 10. Immediate implementation order
 
-The next commits should be narrowly scoped in this order:
+The next commits remain small even though the delivery phases are consolidated:
 
 1. `Add typed settings and validation models`
 2. `Port runtime variables and instruction tokenizer`
 3. `Port deterministic scheduler and timing model`
 4. `Add session state machine and fake input backend`
-5. `Add versioned profile storage and legacy importer`
-6. `Connect simulated sessions to the Slint shell`
-7. `Complete Phase 1 verification and refresh dist`
+5. `Add profile storage and deliberate legacy import`
+6. `Build reusable Jivaro controls and functional editor`
+7. `Connect settings, profiles, and simulation to the UI`
+8. `Complete Phase 1 verification and refresh dist`
 
-Do not begin Windows injection until item 7 passes. This preserves a testable portable foundation
-for macOS and Linux instead of baking Windows assumptions into the engine.
+Do not begin real Windows injection until item 8 passes. This preserves a portable foundation for
+macOS and Linux while removing the duplicated temporary UI phase.
 
-## 12. Plan maintenance
+## 11. Plan maintenance
 
-- Mark a work package complete only after its gate passes.
-- Record design changes in the `BUILD_PLAN.md` decision log.
-- If platform behavior differs, update the capability matrix and UI copy in the same change.
-- If a dependency adds more than 1 MiB to the Windows raw executable, record why it is justified or
-  replace it.
-- Keep failed experiments out of the default feature set and `/dist` artifact.
+- Mark work packages complete only after their gate passes.
+- Record product or architecture changes in the `BUILD_PLAN.md` decision log.
+- Update capability copy and tests in the same change when a platform differs.
+- Keep failed experiments out of default features and `/dist`.
+- Push coherent, verified commits to `main` from the normal host user context.

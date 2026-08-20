@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Approved for implementation planning
+Status: Consolidated plan ready for implementation questions
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -14,7 +14,7 @@ gates are defined in [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 
 - Use Rust for application logic and platform integration.
 - Use Slint for the UI.
-- Preserve current behavior before replacing the UI with the final design.
+- Preserve current behavior while building the final UI incrementally; do not create a throwaway parity interface.
 - Ship a separate native build for each supported platform.
 - Initial architectures:
   - Windows x64.
@@ -364,75 +364,53 @@ native CI/release runners when those artifacts are introduced.
 
 Gate: a blank branded application builds as one raw executable on Windows and CI can begin platform builds.
 
-### Phase 1 — Portable core parity
+### Phase 1 — Portable product alpha
 
-- [ ] Port settings models and WPM conversion.
-- [ ] Port runtime variables and token escaping.
-- [ ] Port special-key tokenizer.
-- [ ] Port scheduler, pauses, looping, stop-after behavior, and simulated errors.
-- [ ] Implement session state machine and fake input backend.
-- [ ] Port versioned persistence and legacy importer.
-- [ ] Add deterministic unit and state-machine tests.
+- [ ] Port typed settings, validation, warnings, WPM conversion, runtime variables, and special-key parsing.
+- [ ] Port deterministic scheduling, pauses, breaks, errors, loops, stop-after behavior, and the session state machine.
+- [ ] Add a fake input backend, manual time, seeded randomness, and complete portable parity tests.
+- [ ] Add versioned profiles and a clear manual legacy-import flow that never imports automatically.
+- [ ] Build the final Jivaro editor-first UI instead of a temporary parity interface.
+- [ ] Connect settings, profiles, visible simulation, progress, ETA, warnings, and session controls.
+- [ ] Compile on Windows, macOS, and Linux CI and refresh the verified Windows `/dist` alpha.
 
-Gate: core tests reproduce v0.13 behavior without a real keyboard or UI.
+Gate: all portable v0.13 behavior is available through the modern UI, and a user can complete a clearly labelled simulated session without external keystrokes.
 
-### Phase 2 — Functional parity UI
+### Phase 2 — Windows feature-complete beta
 
-- [ ] Build an intentionally plain Slint UI exposing every current setting.
-- [ ] Connect editor, profiles, session commands, progress, ETA, warnings, and update check.
-- [ ] Add hotkey recorder and capability model.
-- [ ] Ensure all features can be exercised before visual redesign.
+- [ ] Port foreground Unicode and special-key injection.
+- [ ] Port native background target capture, validation, and message injection.
+- [ ] Port browser foreground assist, focus-loss protection, and useful failure reporting.
+- [ ] Register expanded global shortcuts and active-session Escape behavior.
+- [ ] Add Windows capability, tray, icon, version metadata, and portable-artifact integration.
+- [ ] Test Unicode, emoji, special keys, stop/pause responsiveness, focus loss, closed targets, browsers, and native controls.
+- [ ] Compare behavior with Python v0.13 and measure the optimized executable.
 
-Gate: no current user-facing feature is missing from the Rust application, excluding documented platform limitations.
+Gate: Windows passes the parity and clean-machine matrices and the verified beta replaces `/dist`.
 
-### Phase 3 — Windows backend parity
+### Phase 3 — macOS and Linux expansion
 
-- [ ] Port foreground injection.
-- [ ] Port background target capture and message injection.
-- [ ] Port browser focus assist and failure reporting.
-- [ ] Register global shortcuts and Escape behavior.
-- [ ] Test Unicode, special keys, stop/pause responsiveness, focus loss, and closed targets.
-- [ ] Measure raw executable size against the Python release.
-
-Gate: Windows passes the complete parity checklist and is safe for beta use.
-
-### Phase 4 — macOS and Linux backends
-
-- [ ] Implement macOS permissions, shortcuts, foreground typing, and verified target assistance.
-- [ ] Build and test Apple Silicon and Intel releases.
+- [ ] Implement macOS permissions, shortcuts, foreground typing, optional verified target assistance, and native artifacts.
+- [ ] Build and test Apple Silicon and Intel before producing Universal 2 when practical.
 - [ ] Implement Linux X11 input and shortcuts.
-- [ ] Implement Wayland portal/libei flow and capability messaging.
-- [ ] Complete the Linux compositor test matrix.
+- [ ] Implement Wayland Global Shortcuts and permission-mediated portal/libei input where available.
+- [ ] Add platform onboarding and capability messaging to the existing product UI.
+- [ ] Complete the native editor, browser, compositor, permission, and architecture matrices.
 
-Gate: each platform completes onboarding and a real typing session, with unavailable capabilities explained before Start.
+Gate: every published platform completes onboarding and a real session, with unavailable capabilities explained before Start.
 
-### Phase 5 — Jivaro UI redesign and additions
+### Phase 4 — Release hardening
 
-- [ ] Implement the design tokens in `theme.slint`.
-- [ ] Replace the parity UI with the main-window interaction model in this plan.
-- [ ] Add first-run onboarding and internal typing test.
-- [ ] Add collapsible/contextual advanced controls.
-- [ ] Build improved profile management.
-- [ ] Add Dark, Light, and System themes.
-- [ ] Add system tray controls where supported.
-- [ ] Complete keyboard navigation, scaling, contrast, and reduced-motion review.
-- [ ] Run usability passes for new, occasional, and power users.
+- [ ] Finish Dark, Light, and System themes, tray behavior, accessibility, scaling, reduced motion, and usability passes.
+- [ ] Embed final icons, metadata, licenses, and version information.
+- [ ] Produce Windows portable EXE/optional installer, macOS app/DMG, and Linux raw/AppImage artifacts.
+- [ ] Add signing and notarization when credentials are available.
+- [ ] Publish checksums, manifests, dependency licenses, and size reports.
+- [ ] Connect asynchronous GitHub Release checks and user-initiated downloads.
+- [ ] Add privacy-safe diagnostics with Copy and Export actions.
+- [ ] Run antivirus, clean-machine, migration, upgrade, permission, and uninstall checks.
 
-Gate: a first-time user can complete a successful run without documentation, and advanced users can access every existing setting without cluttering the basic flow.
-
-### Phase 6 — Packaging, updates, and release hardening
-
-- [ ] Embed icons, metadata, licenses, and version information.
-- [ ] Produce Windows portable EXE and optional installer.
-- [ ] Produce macOS `.app`/DMG; add signing and notarization when credentials are available.
-- [ ] Produce Linux raw executable and AppImage.
-- [ ] Publish checksums and an artifact manifest.
-- [ ] Connect asynchronous GitHub Release checks.
-- [ ] Add crash-safe local diagnostics with a user-controlled copy/export action.
-- [ ] Run antivirus false-positive, clean-machine, and upgrade/migration checks.
-- [ ] Write installation, permission, troubleshooting, and uninstall documentation.
-
-Gate: reproducible release artifacts pass clean-machine smoke tests on all target platforms.
+Gate: reproducible release artifacts pass all advertised platform and clean-machine checks.
 
 ## 10. Verification strategy
 
@@ -488,23 +466,25 @@ Gate: reproducible release artifacts pass clean-machine smoke tests on all targe
 | Single-file size grows through dependencies | Use target-specific dependencies, disable unused features, and enforce size tracking |
 | Automated input tests can affect the user’s machine | Use a fake backend by default and run real injection tests only in explicit manual/integration modes |
 
-## 13. Definition of the first implementation milestone
+## 13. Definition of the next implementation milestone
 
-The first milestone after this plan is approved is not a full rewrite. It is a Windows development build containing:
+The next milestone is the first Phase 1 slice:
 
-- A branded Slint shell using the Jivaro tokens.
-- The portable settings/profile models.
-- The tokenizer and token expansion with tests.
-- A fake typing backend that drives visible progress without emitting real keystrokes.
-- Release-size measurement.
+- Typed settings and profile-domain models.
+- Exact v0.13 defaults and normalization rules.
+- Warning generation and WPM conversion.
+- Focused unit tests with no Slint or platform dependency.
 
-That slice validates architecture, UI integration, testing, and artifact size before the native input code is ported.
+Later Phase 1 slices add parsing, deterministic sessions, deliberate profile import, and the modern
+simulation UI before native input is enabled.
 
 ## 14. Decision log
 
 - 2026-08-20: Rust + Slint selected.
-- 2026-08-20: Feature parity will precede final UI redesign.
+- 2026-08-20: Portable parity and the final Jivaro UI will be built incrementally in one product-alpha phase; no throwaway parity UI.
 - 2026-08-20: Windows x64, macOS Apple Silicon/Intel, and Linux x64 selected.
 - 2026-08-20: Windows portable EXE, macOS app/DMG, and Linux raw binary/AppImage selected.
 - 2026-08-20: Jivaro.net palette and visual identity selected, with usability and accessibility taking priority over exact website imitation.
 - 2026-08-20: Best-effort, capability-aware behavior approved for platform security restrictions.
+- 2026-08-20: Remaining delivery consolidated from six phases to four to remove duplicate UI work while preserving internal test gates.
+- 2026-08-20: Legacy profiles will never import automatically; detection leads to an easy, explicit Import action.

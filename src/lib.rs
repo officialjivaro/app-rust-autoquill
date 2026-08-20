@@ -4,7 +4,6 @@
 //! interfaces so that the UI and platform integrations remain separate.
 
 pub mod domain;
-pub mod simulation;
 pub mod typing;
 
 /// Name shown throughout the user interface.

@@ -1,15 +1,26 @@
 //! Portable compilation of AutoQuill documents into safe instructions.
 
+mod engine;
 mod instruction;
+mod random;
+mod scheduler;
 mod templating;
+mod timing;
 mod tokenizer;
 
 use std::{error::Error, fmt};
 
+pub use engine::{
+    CompletionReason, EngineSnapshot, EngineUpdate, PreviewOperation, SessionAlreadyActive,
+    SessionEngine, SessionPlan,
+};
 pub use instruction::{Instruction, SpecialKey};
+pub use random::{RandomSource, SeededRandom};
+pub use scheduler::{BreakScheduler, ErrorScheduler, ShortPauseScheduler};
 pub use templating::{
     RuntimeValueError, RuntimeValueProvider, RuntimeVariable, SystemRuntimeValues,
 };
+pub use timing::{MINIMUM_COMPENSATED_DELAY, TimingModel, estimated_pause_overhead_per_character};
 pub use tokenizer::MAX_KEY_REPETITIONS;
 
 use templating::expand_runtime_variables;

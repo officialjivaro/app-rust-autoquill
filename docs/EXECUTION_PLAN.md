@@ -215,6 +215,9 @@ Gate: Rust and Python fixtures produce the same logical instruction stream.
 
 ### 1.3 Deterministic scheduling and session engine
 
+Status: Completed on 2026-08-21, including the advanced safe-simulation controls. Native input
+remains intentionally disabled until Phase 2.
+
 Deliverables:
 
 - Port WPM delay and 0.8–1.2 token variance.
@@ -226,6 +229,10 @@ Deliverables:
 - Check cancellation during every countdown, delay, pause, break, error, and loop wait.
 - Target less than 100 ms from Stop to no more output.
 - Add an in-memory backend and manual clock.
+
+Implementation note: the engine emits an in-memory `PreviewOperation` stream. The Slint adapter
+renders that stream without exposing any operating-system input API, and tests advance it with
+manual elapsed durations and seeded randomness.
 
 Tests:
 
@@ -484,8 +491,8 @@ The next commits remain small even though the delivery phases are consolidated:
 
 - [x] `Add typed settings and validation models`
 - [x] `Port runtime variables and instruction tokenizer`
-- [ ] `Port deterministic scheduler and timing model`
-- [ ] `Add session state machine and fake input backend`
+- [x] `Port deterministic scheduler and timing model`
+- [x] `Add session state machine and fake input backend`
 - [ ] `Add profile storage and deliberate legacy import`
 - [x] `Build reusable Jivaro controls and functional editor`
 - [ ] `Connect settings, profiles, and simulation to the UI`

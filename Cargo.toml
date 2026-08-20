@@ -15,6 +15,8 @@ renderer-femtovg = ["slint/renderer-femtovg"]
 renderer-software = ["slint/renderer-software"]
 
 [dependencies]
+# Pin below 0.3.10: its build script attempted an unexpected executable download during a clean build.
+arrayref = "=0.3.9"
 copypasta = "=0.10.2"
 slint = { version = "=1.17.1", default-features = false, features = [
     "accessibility",
@@ -48,3 +50,13 @@ strip = "symbols"
 [profile.release-size]
 inherits = "release"
 opt-level = "z"
+
+# Keep local development artifacts manageable on storage-constrained machines. AutoQuill's
+# automated checks do not need large PDBs or duplicated incremental object caches.
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

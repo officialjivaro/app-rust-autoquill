@@ -1,17 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use autoquill::{
     APP_VERSION,
-    domain::{SessionState, Wpm},
+    domain::{SessionState, SettingsDraft},
     initialize_diagnostics,
-    simulation::{SimulationController, SimulationUpdate},
-    typing::{CompileWarning, SystemRuntimeValues, compile},
+    typing::{
+        CompileWarning, CompletionReason, EngineUpdate, PreviewOperation, SeededRandom,
+        SessionEngine, SessionPlan, SystemRuntimeValues, compile,
+    },
     window_title,
 };
 
 slint::include_modules!();
+
+const UI_TICK: Duration = Duration::from_millis(16);
 
 fn main() -> Result<(), slint::PlatformError> {
     initialize_diagnostics();
@@ -24,8 +32,9 @@ fn main() -> Result<(), slint::PlatformError> {
     if std::env::var_os("AUTOQUILL_SMOKE_TEST").is_some() {
         let smoke_text = "Hi[ENTER]";
         app.set_draft_text(smoke_text.into());
+        app.set_wpm(200);
         app.invoke_draft_edited(smoke_text.into());
-        app.invoke_start_simulation(smoke_text.into(), 200);
+        app.invoke_start_simulation();
         app.show()?;
         slint::Timer::single_shot(Duration::from_millis(450), || {
             let _ = slint::quit_event_loop();
@@ -40,8 +49,11 @@ fn main() -> Result<(), slint::PlatformError> {
 }
 
 fn connect_interactions(app: &AppWindow) {
-    let controller = Rc::new(RefCell::new(SimulationController::default()));
+    let engine = Rc::new(RefCell::new(
+        SessionEngine::<SeededRandom>::from_system_time(),
+    ));
     let timer = Rc::new(slint::Timer::default());
+    let last_tick = Rc::new(RefCell::new(Instant::now()));
 
     let weak_app = app.as_weak();
     app.on_draft_edited(move |text| {
@@ -69,13 +81,14 @@ fn connect_interactions(app: &AppWindow) {
     });
 
     let weak_app = app.as_weak();
-    let start_controller = Rc::clone(&controller);
+    let start_engine = Rc::clone(&engine);
     let start_timer = Rc::clone(&timer);
-    app.on_start_simulation(move |text, raw_wpm| {
+    let start_last_tick = Rc::clone(&last_tick);
+    app.on_start_simulation(move || {
         let Some(app) = weak_app.upgrade() else {
             return;
         };
-        let source = text.to_string();
+        let source = app.get_draft_text().to_string();
         if source.trim().is_empty() {
             show_error(
                 &app,
@@ -84,7 +97,6 @@ fn connect_interactions(app: &AppWindow) {
             return;
         }
 
-        start_timer.stop();
         let compilation = match compile(&source, &SystemRuntimeValues) {
             Ok(compilation) => compilation,
             Err(error) => {
@@ -93,8 +105,21 @@ fn connect_interactions(app: &AppWindow) {
             }
         };
         let warning_notice = summarize_warnings(&compilation.warnings);
-        let update = start_controller.borrow_mut().start(compilation);
-        apply_simulation_update(&app, &update);
+        let plan = SessionPlan {
+            instructions: compilation.instructions,
+            settings: settings_from_ui(&app),
+        };
+
+        start_timer.stop();
+        app.set_preview_text("".into());
+        let update = match start_engine.borrow_mut().start(plan) {
+            Ok(update) => update,
+            Err(error) => {
+                show_error(&app, &error.to_string());
+                return;
+            }
+        };
+        apply_engine_update(&app, &update);
         app.set_notice_is_error(false);
         app.set_notice_text(
             warning_notice
@@ -104,17 +129,17 @@ fn connect_interactions(app: &AppWindow) {
                 .into(),
         );
 
-        if !start_controller.borrow().is_running() {
-            app.set_notice_text("Simulation complete — no keystrokes were sent.".into());
+        if !update.snapshot.state.is_active() {
+            apply_completion_notice(&app, update.snapshot.completion_reason);
             return;
         }
 
-        let interval =
-            Duration::from_secs_f64(Wpm::new(i64::from(raw_wpm)).character_delay_seconds());
+        *start_last_tick.borrow_mut() = Instant::now();
         let tick_app = app.as_weak();
-        let tick_controller = Rc::clone(&start_controller);
+        let tick_engine = Rc::clone(&start_engine);
+        let tick_last_tick = Rc::clone(&start_last_tick);
         let weak_timer = Rc::downgrade(&start_timer);
-        start_timer.start(slint::TimerMode::Repeated, interval, move || {
+        start_timer.start(slint::TimerMode::Repeated, UI_TICK, move || {
             let Some(app) = tick_app.upgrade() else {
                 if let Some(timer) = weak_timer.upgrade() {
                     timer.stop();
@@ -122,12 +147,13 @@ fn connect_interactions(app: &AppWindow) {
                 return;
             };
 
-            let update = tick_controller.borrow_mut().tick();
-            let is_complete = update.state == SessionState::Completed;
-            apply_simulation_update(&app, &update);
-            if is_complete {
-                app.set_notice_is_error(false);
-                app.set_notice_text("Simulation complete — no keystrokes were sent.".into());
+            let now = Instant::now();
+            let elapsed = now.saturating_duration_since(*tick_last_tick.borrow());
+            *tick_last_tick.borrow_mut() = now;
+            let update = tick_engine.borrow_mut().advance(elapsed);
+            apply_engine_update(&app, &update);
+            if !update.snapshot.state.is_active() {
+                apply_completion_notice(&app, update.snapshot.completion_reason);
                 if let Some(timer) = weak_timer.upgrade() {
                     timer.stop();
                 }
@@ -136,18 +162,88 @@ fn connect_interactions(app: &AppWindow) {
     });
 
     let weak_app = app.as_weak();
-    let stop_controller = Rc::clone(&controller);
+    let pause_engine = Rc::clone(&engine);
+    app.on_pause_simulation(move || {
+        if let Some(app) = weak_app.upgrade() {
+            let update = pause_engine.borrow_mut().pause();
+            apply_engine_update(&app, &update);
+            app.set_notice_is_error(false);
+            app.set_notice_text(
+                "Paused safely. Paused time does not count toward the active-time limit.".into(),
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let resume_engine = Rc::clone(&engine);
+    let resume_last_tick = Rc::clone(&last_tick);
+    app.on_resume_simulation(move || {
+        if let Some(app) = weak_app.upgrade() {
+            *resume_last_tick.borrow_mut() = Instant::now();
+            let update = resume_engine.borrow_mut().resume();
+            apply_engine_update(&app, &update);
+            app.set_notice_is_error(false);
+            app.set_notice_text("Safe simulation resumed.".into());
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let stop_engine = Rc::clone(&engine);
     let stop_timer = Rc::clone(&timer);
     app.on_stop_simulation(move || {
         stop_timer.stop();
         if let Some(app) = weak_app.upgrade() {
-            let update = stop_controller.borrow_mut().stop();
-            apply_simulation_update(&app, &update);
-            app.set_session_status("STOPPED".into());
+            let update = stop_engine.borrow_mut().stop();
+            apply_engine_update(&app, &update);
             app.set_notice_is_error(false);
             app.set_notice_text("Simulation stopped safely. You can edit and restart it.".into());
         }
     });
+
+    let weak_app = app.as_weak();
+    let reset_engine = Rc::clone(&engine);
+    let reset_timer = Rc::clone(&timer);
+    app.on_reset_simulation(move || {
+        reset_timer.stop();
+        if let Some(app) = weak_app.upgrade() {
+            let update = reset_engine.borrow_mut().reset();
+            app.set_preview_text("".into());
+            apply_engine_update(&app, &update);
+            app.set_notice_is_error(false);
+            app.set_notice_text(
+                "Preview reset. Your draft and advanced settings were kept.".into(),
+            );
+        }
+    });
+}
+
+fn settings_from_ui(app: &AppWindow) -> autoquill::domain::TypingSettings {
+    SettingsDraft {
+        wpm: Some(i64::from(app.get_wpm())),
+        startup_delay_enabled: app.get_startup_delay_enabled(),
+        stop_after_enabled: app.get_stop_after_enabled(),
+        stop_after_seconds: Some(i64::from(app.get_stop_after_seconds())),
+        loop_enabled: app.get_loop_enabled(),
+        loop_min_seconds: Some(i64::from(app.get_loop_min_seconds())),
+        loop_max_seconds: Some(i64::from(app.get_loop_max_seconds())),
+        errors_enabled: app.get_errors_enabled(),
+        error_min_interval: Some(i64::from(app.get_error_min_interval())),
+        error_max_interval: Some(i64::from(app.get_error_max_interval())),
+        error_min_count: Some(i64::from(app.get_error_min_count())),
+        error_max_count: Some(i64::from(app.get_error_max_count())),
+        breaks_enabled: app.get_breaks_enabled(),
+        break_min_words: Some(i64::from(app.get_break_min_words())),
+        break_max_words: Some(i64::from(app.get_break_max_words())),
+        break_min_seconds: Some(f64::from(app.get_break_min_seconds())),
+        break_max_seconds: Some(f64::from(app.get_break_max_seconds())),
+        pauses_enabled: app.get_pauses_enabled(),
+        pause_min_characters: Some(i64::from(app.get_pause_min_characters())),
+        pause_max_characters: Some(i64::from(app.get_pause_max_characters())),
+        pause_min_seconds: Some(f64::from(app.get_pause_min_milliseconds()) / 1_000.0),
+        pause_max_seconds: Some(f64::from(app.get_pause_max_milliseconds()) / 1_000.0),
+        ..SettingsDraft::default()
+    }
+    .normalize()
 }
 
 fn update_document_summary(app: &AppWindow, text: &str) {
@@ -206,26 +302,74 @@ fn summarize_warnings(warnings: &[CompileWarning]) -> Option<String> {
     })
 }
 
-fn apply_simulation_update(app: &AppWindow, update: &SimulationUpdate) {
-    let is_active = update.state == SessionState::Typing;
+fn apply_engine_update(app: &AppWindow, update: &EngineUpdate) {
+    if !update.operations.is_empty() {
+        let mut preview = app.get_preview_text().to_string();
+        for operation in &update.operations {
+            match operation {
+                PreviewOperation::Intended(instruction) => {
+                    preview.push_str(&instruction.preview_fragment());
+                }
+                PreviewOperation::TypoCharacter(character) => preview.push(*character),
+                PreviewOperation::CorrectionBackspace => {
+                    preview.pop();
+                }
+            }
+        }
+        app.set_preview_text(preview.into());
+    }
+
+    let snapshot = &update.snapshot;
+    let is_active = snapshot.state.is_active();
     app.set_session_active(is_active);
+    app.set_session_paused(snapshot.state == SessionState::Paused);
     app.set_can_start(!is_active && !app.get_draft_text().trim().is_empty());
-    app.set_simulation_progress(update.progress);
-    app.set_preview_text(update.preview_text.clone().into());
-    app.set_current_action(update.current_action.clone().into());
+    app.set_simulation_progress(snapshot.progress);
+    app.set_current_action(snapshot.current_action.clone().into());
     app.set_instruction_progress(
         format!(
-            "{} / {} INSTRUCTIONS",
-            update.completed_instructions, update.total_instructions
+            "{} / {} ACTIONS",
+            snapshot.completed_instructions, snapshot.total_instructions
         )
         .into(),
     );
+    app.set_pass_number(i32::try_from(snapshot.pass).unwrap_or(i32::MAX));
+    app.set_elapsed_text(format!("{:.1}S ACTIVE", snapshot.active_elapsed.as_secs_f64()).into());
     app.set_session_status(
-        match update.state {
+        match snapshot.state {
+            SessionState::Countdown => "COUNTDOWN",
             SessionState::Typing => "SIMULATING",
+            SessionState::LoopWait => "LOOP WAIT",
+            SessionState::Paused => "PAUSED",
+            SessionState::Completed
+                if snapshot.completion_reason == Some(CompletionReason::StopAfterReached) =>
+            {
+                "TIME LIMIT"
+            }
             SessionState::Completed => "COMPLETE",
             SessionState::Failed => "ERROR",
+            SessionState::Idle
+                if snapshot.completion_reason == Some(CompletionReason::UserStopped) =>
+            {
+                "STOPPED"
+            }
             _ => "READY",
+        }
+        .into(),
+    );
+}
+
+fn apply_completion_notice(app: &AppWindow, reason: Option<CompletionReason>) {
+    app.set_notice_is_error(false);
+    app.set_notice_text(
+        match reason {
+            Some(CompletionReason::StopAfterReached) => {
+                "Active-time limit reached. The simulation stopped safely."
+            }
+            Some(CompletionReason::UserStopped) => {
+                "Simulation stopped safely. You can edit and restart it."
+            }
+            _ => "Simulation complete — no keystrokes were sent.",
         }
         .into(),
     );
@@ -233,6 +377,7 @@ fn apply_simulation_update(app: &AppWindow, update: &SimulationUpdate) {
 
 fn show_error(app: &AppWindow, message: &str) {
     app.set_session_active(false);
+    app.set_session_paused(false);
     app.set_can_start(!app.get_draft_text().trim().is_empty());
     app.set_session_status("NEEDS ATTENTION".into());
     app.set_notice_is_error(true);

@@ -12,6 +12,8 @@ pub enum SessionState {
     Countdown,
     /// Instructions are being processed.
     Typing,
+    /// A configured loop delay is active before the next pass.
+    LoopWait,
     /// A user-paused session that can resume.
     Paused,
     /// Cancellation has been requested and the worker is winding down.
@@ -28,7 +30,12 @@ impl SessionState {
     pub const fn is_active(self) -> bool {
         matches!(
             self,
-            Self::Preparing | Self::Countdown | Self::Typing | Self::Paused | Self::Stopping
+            Self::Preparing
+                | Self::Countdown
+                | Self::Typing
+                | Self::LoopWait
+                | Self::Paused
+                | Self::Stopping
         )
     }
 
@@ -46,6 +53,7 @@ mod tests {
     #[test]
     fn active_and_terminal_states_are_unambiguous() {
         assert!(SessionState::Typing.is_active());
+        assert!(SessionState::LoopWait.is_active());
         assert!(SessionState::Paused.is_active());
         assert!(!SessionState::Idle.is_active());
         assert!(SessionState::Completed.is_terminal());

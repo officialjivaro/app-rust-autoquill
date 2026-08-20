@@ -1,6 +1,81 @@
-import { AboutSlint, SpinBox } from "std-widgets.slint";
+import { AboutSlint, CheckBox, SpinBox } from "std-widgets.slint";
 import { JivaroButton, JivaroTextEditor, TokenChip } from "controls.slint";
 import { JivaroTheme, MetaLabel, StatusDot } from "theme.slint";
+
+component SettingRange inherits HorizontalLayout {
+    in property <string> label;
+    in property <bool> field-enabled: true;
+    in property <int> minimum: 0;
+    in property <int> maximum: 10000;
+    in-out property <int> min-value;
+    in-out property <int> max-value;
+
+    min-height: 34px;
+    max-height: 34px;
+    spacing: 7px;
+    alignment: center;
+
+    Text {
+        text: root.label;
+        color: root.field-enabled ? JivaroTheme.text-secondary : JivaroTheme.text-disabled;
+        font-family: "Inter";
+        font-size: 11px;
+        horizontal-stretch: 1;
+        overflow: elide;
+    }
+    SpinBox {
+        min-width: 76px;
+        max-width: 76px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.min-value;
+        enabled: root.field-enabled;
+    }
+    Text {
+        text: "TO";
+        color: JivaroTheme.text-muted;
+        font-family: "Consolas";
+        font-size: 9px;
+    }
+    SpinBox {
+        min-width: 76px;
+        max-width: 76px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.max-value;
+        enabled: root.field-enabled;
+    }
+}
+
+component SettingValue inherits HorizontalLayout {
+    in property <string> label;
+    in property <bool> field-enabled: true;
+    in property <int> minimum: 0;
+    in property <int> maximum: 86400;
+    in-out property <int> value;
+
+    min-height: 34px;
+    max-height: 34px;
+    spacing: 7px;
+    alignment: center;
+
+    Text {
+        text: root.label;
+        color: root.field-enabled ? JivaroTheme.text-secondary : JivaroTheme.text-disabled;
+        font-family: "Inter";
+        font-size: 11px;
+        horizontal-stretch: 1;
+        overflow: elide;
+    }
+    SpinBox {
+        min-width: 96px;
+        max-width: 96px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+        enabled: root.field-enabled;
+    }
+}
 
 export component AppWindow inherits Window {
     in property <string> app-version: "0.0.0";
@@ -12,18 +87,47 @@ export component AppWindow inherits Window {
     in-out property <int> word-count: 0;
     in-out property <bool> can-start: false;
     in-out property <bool> session-active: false;
+    in-out property <bool> session-paused: false;
     in-out property <float> simulation-progress: 0;
     in-out property <string> preview-text: "";
     in-out property <string> current-action: "Waiting for text";
     in-out property <string> session-status: "READY";
-    in-out property <string> instruction-progress: "0 / 0 INSTRUCTIONS";
+    in-out property <string> instruction-progress: "0 / 0 ACTIONS";
+    in-out property <int> pass-number: 0;
+    in-out property <string> elapsed-text: "0.0S ACTIVE";
     in-out property <string> notice-text: "Simulation mode is safe: no keystrokes leave this window.";
     in-out property <bool> notice-is-error: false;
+    in-out property <bool> advanced-open: false;
+
+    in-out property <bool> startup-delay-enabled: false;
+    in-out property <bool> stop-after-enabled: false;
+    in-out property <int> stop-after-seconds: 60;
+    in-out property <bool> loop-enabled: false;
+    in-out property <int> loop-min-seconds: 5;
+    in-out property <int> loop-max-seconds: 10;
+    in-out property <bool> errors-enabled: false;
+    in-out property <int> error-min-interval: 15;
+    in-out property <int> error-max-interval: 40;
+    in-out property <int> error-min-count: 1;
+    in-out property <int> error-max-count: 4;
+    in-out property <bool> breaks-enabled: false;
+    in-out property <int> break-min-words: 18;
+    in-out property <int> break-max-words: 42;
+    in-out property <int> break-min-seconds: 2;
+    in-out property <int> break-max-seconds: 5;
+    in-out property <bool> pauses-enabled: false;
+    in-out property <int> pause-min-characters: 120;
+    in-out property <int> pause-max-characters: 250;
+    in-out property <int> pause-min-milliseconds: 600;
+    in-out property <int> pause-max-milliseconds: 1800;
 
     callback draft-edited(string);
     callback insert-token(string, int, int);
-    callback start-simulation(string, int);
+    callback start-simulation();
+    callback pause-simulation();
+    callback resume-simulation();
     callback stop-simulation();
+    callback reset-simulation();
 
     public function place-editor-caret(offset: int) {
         editor.set-selection-offsets(offset, offset);
@@ -78,7 +182,6 @@ export component AppWindow inherits Window {
                     font-weight: 800;
                     letter-spacing: 0.6px;
                 }
-
                 Text {
                     text: "WRITE IT ONCE. PREVIEW EVERY ACTION.";
                     color: JivaroTheme.text-muted;
@@ -106,8 +209,12 @@ export component AppWindow inherits Window {
                     spacing: 9px;
                     alignment: center;
 
-                    StatusDot { dot-color: root.session-active ? JivaroTheme.accent : JivaroTheme.success; }
-                    MetaLabel { text: root.session-active ? "SIMULATING SAFELY" : "INTERACTIVE PREVIEW"; }
+                    StatusDot {
+                        dot-color: root.session-paused ? JivaroTheme.warning : (root.session-active ? JivaroTheme.accent : JivaroTheme.success);
+                    }
+                    MetaLabel {
+                        text: root.session-paused ? "PAUSED SAFELY" : (root.session-active ? "SIMULATING SAFELY" : "INTERACTIVE PREVIEW");
+                    }
                 }
             }
         }
@@ -128,7 +235,6 @@ export component AppWindow inherits Window {
                     spacing: 11px;
 
                     MetaLabel { text: "01 / TEXT TO PREVIEW"; }
-
                     Text {
                         text: "What should AutoQuill type?";
                         color: JivaroTheme.text-primary;
@@ -150,7 +256,6 @@ export component AppWindow inherits Window {
                             font-size: 10px;
                             font-weight: 700;
                         }
-
                         TokenChip {
                             label: "{CLIPBOARD}";
                             enabled: !root.session-active;
@@ -170,7 +275,7 @@ export component AppWindow inherits Window {
 
                     editor := JivaroTextEditor {
                         vertical-stretch: 1;
-                        min-height: 210px;
+                        min-height: 200px;
                         text <=> root.draft-text;
                         enabled: !root.session-active;
                         placeholder-text: "Type or paste plain text here…\n\nTry: Hello {DATE}[ENTER]This is a safe preview.";
@@ -184,15 +289,13 @@ export component AppWindow inherits Window {
                         alignment: center;
 
                         Text {
-                            text: root.character-count + " CHARACTERS  /  " + root.word-count + " WORDS";
+                            text: root.character-count + " CHARS  /  " + root.word-count + " WORDS";
                             color: JivaroTheme.text-muted;
                             font-family: "Consolas";
                             font-size: 10px;
                             font-weight: 600;
                         }
-
                         Rectangle { horizontal-stretch: 1; background: transparent; }
-
                         Text {
                             text: "WPM";
                             color: JivaroTheme.text-muted;
@@ -200,14 +303,22 @@ export component AppWindow inherits Window {
                             font-size: 10px;
                             font-weight: 700;
                         }
-
                         SpinBox {
-                            min-width: 112px;
-                            max-width: 112px;
+                            min-width: 92px;
+                            max-width: 92px;
                             minimum: 1;
                             maximum: 200;
                             value <=> root.wpm;
                             enabled: !root.session-active;
+                        }
+                        JivaroButton {
+                            min-width: 92px;
+                            max-width: 92px;
+                            min-height: 36px;
+                            max-height: 36px;
+                            label: "SETTINGS";
+                            enabled: !root.session-active;
+                            clicked => { root.advanced-open = true; }
                         }
                     }
                 }
@@ -222,8 +333,8 @@ export component AppWindow inherits Window {
                 border-color: JivaroTheme.border;
 
                 VerticalLayout {
-                    padding: 20px;
-                    spacing: 11px;
+                    padding: 18px;
+                    spacing: 9px;
 
                     HorizontalLayout {
                         min-height: 18px;
@@ -235,7 +346,7 @@ export component AppWindow inherits Window {
                         Rectangle { horizontal-stretch: 1; background: transparent; }
                         Text {
                             text: root.session-status;
-                            color: root.notice-is-error ? JivaroTheme.danger : (root.session-active ? JivaroTheme.accent : JivaroTheme.success);
+                            color: root.notice-is-error ? JivaroTheme.danger : (root.session-paused ? JivaroTheme.warning : (root.session-active ? JivaroTheme.accent : JivaroTheme.success));
                             font-family: "Consolas";
                             font-size: 10px;
                             font-weight: 800;
@@ -249,7 +360,6 @@ export component AppWindow inherits Window {
                         font-size: 20px;
                         font-weight: 750;
                     }
-
                     Text {
                         text: "Characters appear as text. Special keys appear between ‹ › markers.";
                         color: JivaroTheme.text-secondary;
@@ -260,7 +370,7 @@ export component AppWindow inherits Window {
 
                     JivaroTextEditor {
                         vertical-stretch: 1;
-                        min-height: 150px;
+                        min-height: 125px;
                         text: root.preview-text;
                         read-only: true;
                         placeholder-text: "Your simulation preview appears here.";
@@ -272,7 +382,7 @@ export component AppWindow inherits Window {
                         border-radius: 10px;
                         background: root.session-active ? JivaroTheme.accent-soft : JivaroTheme.background;
                         border-width: 1px;
-                        border-color: root.session-active ? JivaroTheme.accent : JivaroTheme.border;
+                        border-color: root.session-paused ? JivaroTheme.warning : (root.session-active ? JivaroTheme.accent : JivaroTheme.border);
 
                         VerticalLayout {
                             padding-left: 12px;
@@ -312,32 +422,55 @@ export component AppWindow inherits Window {
                     HorizontalLayout {
                         min-height: 16px;
                         max-height: 16px;
+                        spacing: 7px;
                         Text {
                             text: root.instruction-progress;
                             color: JivaroTheme.text-muted;
                             font-family: "Consolas";
-                            font-size: 10px;
+                            font-size: 9px;
                             font-weight: 650;
                         }
                         Rectangle { horizontal-stretch: 1; background: transparent; }
                         Text {
-                            text: round(root.simulation-progress * 100) + "%";
+                            text: (root.pass-number > 0 ? "P" + root.pass-number + "  •  " : "") + root.elapsed-text;
                             color: JivaroTheme.text-muted;
                             font-family: "Consolas";
-                            font-size: 10px;
+                            font-size: 9px;
                             font-weight: 650;
                         }
                     }
 
-                    JivaroButton {
-                        label: root.session-active ? "STOP SIMULATION" : "START SIMULATION";
-                        primary: true;
-                        enabled: root.session-active || root.can-start;
-                        clicked => {
-                            if (root.session-active) {
-                                root.stop-simulation();
-                            } else {
-                                root.start-simulation(root.draft-text, root.wpm);
+                    HorizontalLayout {
+                        min-height: 38px;
+                        max-height: 38px;
+                        spacing: 8px;
+
+                        JivaroButton {
+                            horizontal-stretch: 1;
+                            label: root.session-paused ? "RESUME" : (root.session-active ? "PAUSE" : "START SIMULATION");
+                            primary: true;
+                            enabled: root.session-active || root.can-start;
+                            clicked => {
+                                if (root.session-paused) {
+                                    root.resume-simulation();
+                                } else if (root.session-active) {
+                                    root.pause-simulation();
+                                } else {
+                                    root.start-simulation();
+                                }
+                            }
+                        }
+                        JivaroButton {
+                            min-width: 82px;
+                            max-width: 82px;
+                            label: root.session-active ? "STOP" : "RESET";
+                            enabled: root.session-active || root.preview-text != "";
+                            clicked => {
+                                if (root.session-active) {
+                                    root.stop-simulation();
+                                } else {
+                                    root.reset-simulation();
+                                }
                             }
                         }
                     }
@@ -377,22 +510,233 @@ export component AppWindow inherits Window {
                 min-width: 120px;
                 max-width: 120px;
             }
-
             Text {
                 text: "Preview only — global shortcuts and native typing stay disabled.";
                 color: JivaroTheme.text-muted;
                 font-family: "Inter";
                 font-size: 11px;
             }
-
             Rectangle { horizontal-stretch: 1; background: transparent; }
-
             Text {
                 text: "JIVARO / AUTOQUILL  •  v" + root.app-version;
                 color: JivaroTheme.text-muted;
                 font-family: "Consolas";
                 font-size: 10px;
                 font-weight: 600;
+            }
+        }
+    }
+
+    if root.advanced-open: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        background: #08090acc;
+
+        TouchArea { clicked => { root.advanced-open = false; } }
+
+        settings-panel := Rectangle {
+            width: min(root.width - 40px, 820px);
+            height: min(root.height - 40px, 570px);
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            border-radius: 18px;
+            background: JivaroTheme.surface;
+            border-width: 1px;
+            border-color: JivaroTheme.border-strong;
+
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 22px;
+                spacing: 14px;
+
+                HorizontalLayout {
+                    min-height: 48px;
+                    max-height: 48px;
+                    spacing: 12px;
+                    alignment: center;
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text {
+                            text: "ADVANCED SESSION SETTINGS";
+                            color: JivaroTheme.text-primary;
+                            font-family: "Inter";
+                            font-size: 19px;
+                            font-weight: 780;
+                        }
+                        Text {
+                            text: "Optional controls for timing and natural variation. Defaults stay simple.";
+                            color: JivaroTheme.text-muted;
+                            font-family: "Inter";
+                            font-size: 11px;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    JivaroButton {
+                        min-width: 74px;
+                        max-width: 74px;
+                        label: "DONE";
+                        clicked => { root.advanced-open = false; }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 14px;
+                    vertical-stretch: 1;
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 12px;
+                        background: JivaroTheme.background;
+                        border-width: 1px;
+                        border-color: JivaroTheme.border;
+
+                        VerticalLayout {
+                            padding: 15px;
+                            spacing: 8px;
+
+                            MetaLabel { text: "SESSION"; }
+                            Text {
+                                text: "Control when the run begins, ends, or repeats.";
+                                color: JivaroTheme.text-muted;
+                                font-family: "Inter";
+                                font-size: 11px;
+                                wrap: word-wrap;
+                            }
+                            CheckBox {
+                                text: "2-second startup delay";
+                                checked <=> root.startup-delay-enabled;
+                            }
+                            CheckBox {
+                                text: "Stop after active time";
+                                checked <=> root.stop-after-enabled;
+                            }
+                            SettingValue {
+                                label: "Active seconds";
+                                field-enabled: root.stop-after-enabled;
+                                minimum: 1;
+                                maximum: 86400;
+                                value <=> root.stop-after-seconds;
+                            }
+                            CheckBox {
+                                text: "Repeat until stopped";
+                                checked <=> root.loop-enabled;
+                            }
+                            SettingRange {
+                                label: "Wait seconds";
+                                field-enabled: root.loop-enabled;
+                                minimum: 1;
+                                maximum: 86400;
+                                min-value <=> root.loop-min-seconds;
+                                max-value <=> root.loop-max-seconds;
+                            }
+
+                            Rectangle { min-height: 4px; max-height: 4px; background: transparent; }
+                            Rectangle {
+                                min-height: 70px;
+                                max-height: 70px;
+                                border-radius: 9px;
+                                background: JivaroTheme.accent-soft;
+                                border-width: 1px;
+                                border-color: JivaroTheme.accent;
+                                Text {
+                                    x: 11px;
+                                    y: 9px;
+                                    width: parent.width - 22px;
+                                    height: parent.height - 18px;
+                                    text: "Active time excludes manual pauses. Loop waits reset per-pass progress, matching the original AutoQuill behavior.";
+                                    color: JivaroTheme.text-secondary;
+                                    font-family: "Inter";
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle { vertical-stretch: 1; background: transparent; }
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 12px;
+                        background: JivaroTheme.background;
+                        border-width: 1px;
+                        border-color: JivaroTheme.border;
+
+                        VerticalLayout {
+                            padding: 15px;
+                            spacing: 5px;
+
+                            MetaLabel { text: "HUMANIZE"; }
+                            CheckBox {
+                                text: "Simulated mistakes and corrections";
+                                checked <=> root.errors-enabled;
+                            }
+                            SettingRange {
+                                label: "Action interval";
+                                field-enabled: root.errors-enabled;
+                                minimum: 1;
+                                maximum: 10000;
+                                min-value <=> root.error-min-interval;
+                                max-value <=> root.error-max-interval;
+                            }
+                            SettingRange {
+                                label: "Mistakes / event";
+                                field-enabled: root.errors-enabled;
+                                minimum: 1;
+                                maximum: 100;
+                                min-value <=> root.error-min-count;
+                                max-value <=> root.error-max-count;
+                            }
+
+                            CheckBox {
+                                text: "Longer word-based breaks";
+                                checked <=> root.breaks-enabled;
+                            }
+                            SettingRange {
+                                label: "Word interval";
+                                field-enabled: root.breaks-enabled;
+                                minimum: 1;
+                                maximum: 500;
+                                min-value <=> root.break-min-words;
+                                max-value <=> root.break-max-words;
+                            }
+                            SettingRange {
+                                label: "Break seconds";
+                                field-enabled: root.breaks-enabled;
+                                minimum: 0;
+                                maximum: 60;
+                                min-value <=> root.break-min-seconds;
+                                max-value <=> root.break-max-seconds;
+                            }
+
+                            CheckBox {
+                                text: "Short character-based pauses";
+                                checked <=> root.pauses-enabled;
+                            }
+                            SettingRange {
+                                label: "Character interval";
+                                field-enabled: root.pauses-enabled;
+                                minimum: 1;
+                                maximum: 10000;
+                                min-value <=> root.pause-min-characters;
+                                max-value <=> root.pause-max-characters;
+                            }
+                            SettingRange {
+                                label: "Pause ms";
+                                field-enabled: root.pauses-enabled;
+                                minimum: 0;
+                                maximum: 60000;
+                                min-value <=> root.pause-min-milliseconds;
+                                max-value <=> root.pause-max-milliseconds;
+                            }
+                            Rectangle { vertical-stretch: 1; background: transparent; }
+                        }
+                    }
+                }
             }
         }
     }

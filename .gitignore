@@ -1,4 +1,5 @@
 /target/
+/local-builds/
 /.idea/
 /.vscode/
 *.pdb

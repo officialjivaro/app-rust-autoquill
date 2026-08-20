@@ -8,6 +8,12 @@ with release-size controls and cross-platform CI.
 
 The complete implementation roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md).
 
+## Windows preview
+
+The current portable Windows x64 executable is available at
+[`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). This Phase 0 preview displays
+the new application shell but intentionally does not emit keystrokes yet.
+
 ## Current safety boundary
 
 This foundation build does **not** listen for global shortcuts or emit keystrokes. Those behaviors

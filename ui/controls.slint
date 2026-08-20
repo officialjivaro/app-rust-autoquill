@@ -1,0 +1,197 @@
+import { ScrollView } from "std-widgets.slint";
+import { JivaroTheme } from "theme.slint";
+
+export component JivaroButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    min-height: 38px;
+    min-width: 92px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: root.primary ? JivaroTheme.accent : JivaroTheme.border-strong;
+    background: root.primary ? JivaroTheme.accent : JivaroTheme.surface-raised;
+    forward-focus: button-focus;
+
+    accessible-role: AccessibleRole.button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            root.background: JivaroTheme.surface;
+            root.border-color: JivaroTheme.border;
+            label.color: JivaroTheme.text-disabled;
+            root.opacity: 0.72;
+        }
+        hovered when hitbox.has-hover && root.enabled: {
+            root.background: root.primary ? #e58452 : #2b3035;
+            root.border-color: root.primary ? #e99a72 : JivaroTheme.text-muted;
+        }
+        pressed when hitbox.pressed && root.enabled: {
+            root.background: root.primary ? #bd5c31 : JivaroTheme.background;
+        }
+        focused when button-focus.has-focus && root.enabled: {
+            focus-ring.border-color: JivaroTheme.accent;
+            focus-ring.opacity: 1;
+        }
+    ]
+
+    animate background, border-color, opacity { duration: 120ms; }
+
+    label := Text {
+        text: root.label;
+        color: root.primary ? JivaroTheme.background : JivaroTheme.text-primary;
+        font-family: "Inter";
+        font-size: 12px;
+        font-weight: 750;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    focus-ring := Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: parent.border-radius + 3px;
+        border-width: 1px;
+        border-color: transparent;
+        background: transparent;
+        opacity: 0;
+    }
+
+    hitbox := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            button-focus.focus();
+            root.clicked();
+        }
+    }
+
+    button-focus := FocusScope {
+        x: 0;
+        width: 0;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component TokenChip inherits JivaroButton {
+    min-height: 31px;
+    min-width: 98px;
+    primary: false;
+}
+
+export component JivaroTextEditor inherits Rectangle {
+    in-out property <string> text <=> text-input.text;
+    in property <string> placeholder-text;
+    in property <bool> enabled: true;
+    in property <bool> read-only: false;
+    out property <bool> has-focus: text-input.has-focus;
+    out property <int> cursor-byte-offset: text-input.cursor-position_byte-offset;
+    out property <int> anchor-byte-offset: text-input.anchor-position-byte-offset;
+    callback edited(text: string);
+
+    public function set-selection-offsets(start: int, end: int) {
+        text-input.set-selection-offsets(start, end);
+    }
+
+    public function request-editor-focus() {
+        text-input.focus();
+    }
+
+    forward-focus: text-input;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: JivaroTheme.border;
+    background: JivaroTheme.background;
+    clip: true;
+
+    accessible-role: AccessibleRole.text-input;
+    accessible-label: root.read-only ? "Simulation preview" : "Text to preview";
+    accessible-enabled: root.enabled;
+    accessible-read-only: root.read-only;
+    accessible-value: root.text;
+    accessible-placeholder-text: root.placeholder-text;
+
+    states [
+        focused when root.has-focus: {
+            root.border-color: JivaroTheme.accent;
+        }
+        disabled when !root.enabled: {
+            root.border-color: JivaroTheme.border;
+            root.opacity: 0.72;
+        }
+    ]
+
+    animate border-color, opacity { duration: 120ms; }
+
+    editor-scroll := ScrollView {
+        x: 14px;
+        y: 13px;
+        width: parent.width - 28px;
+        height: parent.height - 26px;
+        viewport-width: self.visible-width;
+        viewport-height: max(self.visible-height, text-input.preferred-height);
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+
+        text-input := TextInput {
+            width: editor-scroll.visible-width;
+            height: max(editor-scroll.visible-height, self.preferred-height);
+            enabled: root.enabled;
+            read-only: root.read-only;
+            single-line: false;
+            wrap: word-wrap;
+            page-height: editor-scroll.visible-height;
+            font-family: "Inter";
+            font-size: 14px;
+            color: JivaroTheme.text-primary;
+            selection-background-color: JivaroTheme.accent;
+            selection-foreground-color: JivaroTheme.background;
+            accessible-role: none;
+
+            edited => {
+                root.edited(self.text);
+            }
+
+            cursor-position-changed(position) => {
+                if (position.y + editor-scroll.viewport-y < 0px) {
+                    editor-scroll.viewport-y = max(editor-scroll.visible-height - self.height, -position.y);
+                } else if (position.y + editor-scroll.viewport-y > editor-scroll.visible-height - 20px) {
+                    editor-scroll.viewport-y = min(0px, max(
+                        editor-scroll.visible-height - self.height,
+                        editor-scroll.visible-height - position.y - 20px
+                    ));
+                }
+            }
+        }
+    }
+
+    if root.text == "" : Text {
+        x: 15px;
+        y: 14px;
+        width: parent.width - 30px;
+        text: root.placeholder-text;
+        color: JivaroTheme.text-disabled;
+        font-family: "Inter";
+        font-size: 14px;
+        wrap: word-wrap;
+        accessible-role: none;
+    }
+}

@@ -1,7 +1,7 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Ready for implementation questions
-Last updated: 2026-08-20
+Status: Phase 1 implementation in progress
+Last updated: 2026-08-21
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
 This document is the day-to-day build sequence for AutoQuill. It consolidates the six remaining
@@ -188,6 +188,9 @@ Tests:
 Gate: settings round-trip through typed Rust values without a UI or JSON file.
 
 ### 1.2 Runtime variables and instruction compiler
+
+Status: Implemented with the first interactive safe-simulation UI on 2026-08-21. The broader
+Python fixture suite remains part of the Phase 1 verification gate.
 
 Deliverables:
 
@@ -480,11 +483,11 @@ Also:
 The next commits remain small even though the delivery phases are consolidated:
 
 - [x] `Add typed settings and validation models`
-- [ ] `Port runtime variables and instruction tokenizer`
+- [x] `Port runtime variables and instruction tokenizer`
 - [ ] `Port deterministic scheduler and timing model`
 - [ ] `Add session state machine and fake input backend`
 - [ ] `Add profile storage and deliberate legacy import`
-- [ ] `Build reusable Jivaro controls and functional editor`
+- [x] `Build reusable Jivaro controls and functional editor`
 - [ ] `Connect settings, profiles, and simulation to the UI`
 - [ ] `Complete Phase 1 verification and refresh dist`
 

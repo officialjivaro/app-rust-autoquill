@@ -4,6 +4,8 @@
 //! interfaces so that the UI and platform integrations remain separate.
 
 pub mod domain;
+pub mod simulation;
+pub mod typing;
 
 /// Name shown throughout the user interface.
 pub const APP_DISPLAY_NAME: &str = "AutoQuill";

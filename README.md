@@ -1,8 +1,8 @@
 # AutoQuill
 
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
-The current codebase is the Phase 0 foundation: a branded, resource-embedded application shell
-with release-size controls and cross-platform CI.
+The current source includes a branded, interactive editor and a safe simulation preview backed by
+the portable runtime-variable and special-key compiler. Simulation never emits external keystrokes.
 
 ![AutoQuill Phase 0 shell](docs/phase0-shell.png)
 
@@ -11,14 +11,15 @@ The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package 
 
 ## Windows preview
 
-The current portable Windows x64 executable is available at
+The currently published Phase 0 Windows x64 executable is available at
 [`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). This Phase 0 preview displays
-the new application shell but intentionally does not emit keystrokes yet.
+the application shell. Per the release plan, `dist` is refreshed only after the complete Phase 1
+gate. Build current source to use the interactive safe simulation.
 
 ## Current safety boundary
 
-This foundation build does **not** listen for global shortcuts or emit keystrokes. Those behaviors
-will be introduced behind tested platform interfaces in later phases.
+The current build does **not** listen for global shortcuts or emit keystrokes. Those behaviors will
+be introduced behind tested platform interfaces in later phases.
 
 ## Prerequisites
 

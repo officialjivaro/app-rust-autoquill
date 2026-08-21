@@ -1,6 +1,6 @@
 //! Portable global-shortcut representation.
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// Modifier keys supported by the expanded shortcut recorder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -114,6 +114,39 @@ impl fmt::Display for Shortcut {
     }
 }
 
+impl FromStr for Shortcut {
+    type Err = ShortcutError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let mut modifiers = ModifierSet::default();
+        let mut key = None;
+        for part in value
+            .split('+')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+        {
+            match part.to_ascii_lowercase().as_str() {
+                "ctrl" | "control" => modifiers.control = true,
+                "alt" => modifiers.alt = true,
+                "shift" => modifiers.shift = true,
+                "meta" | "cmd" | "win" => modifiers.meta = true,
+                "space" => key = Some(ShortcutKey::Space),
+                other if other.starts_with('f') => {
+                    let number = other[1..]
+                        .parse::<u8>()
+                        .map_err(|_| ShortcutError::FunctionKeyOutOfRange)?;
+                    key = Some(ShortcutKey::Function(number));
+                }
+                other if other.chars().count() == 1 => {
+                    key = other.chars().next().map(ShortcutKey::Character);
+                }
+                _ => return Err(ShortcutError::UnsupportedCharacter),
+            }
+        }
+        Self::new(modifiers, key.ok_or(ShortcutError::UnsupportedCharacter)?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +186,12 @@ mod tests {
         let shortcut = Shortcut::new(ModifierSet::default(), ShortcutKey::Character('q'))
             .expect("printable ASCII should be supported");
         assert_eq!(shortcut.to_string(), "Q");
+    }
+
+    #[test]
+    fn display_form_round_trips_through_parser() {
+        let shortcut: Shortcut = "Ctrl+Alt+F8".parse().unwrap();
+        assert_eq!(shortcut.to_string(), "Ctrl+Alt+F8");
+        assert!("F13".parse::<Shortcut>().is_err());
     }
 }

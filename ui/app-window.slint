@@ -1,4 +1,4 @@
-import { AboutSlint, CheckBox, SpinBox } from "std-widgets.slint";
+import { AboutSlint, CheckBox, LineEdit, ListView, SpinBox } from "std-widgets.slint";
 import { JivaroButton, JivaroTextEditor, TokenChip } from "controls.slint";
 import { JivaroTheme, MetaLabel, StatusDot } from "theme.slint";
 
@@ -77,6 +77,12 @@ component SettingValue inherits HorizontalLayout {
     }
 }
 
+export struct ProfileListItem {
+    name: string,
+    badge: string,
+    detail: string,
+}
+
 export component AppWindow inherits Window {
     in property <string> app-version: "0.0.0";
     in property <string> window-title: "AutoQuill";
@@ -99,6 +105,23 @@ export component AppWindow inherits Window {
     in-out property <bool> notice-is-error: false;
     in-out property <bool> advanced-open: false;
 
+    in-out property <bool> profile-manager-open: false;
+    in-out property <[ProfileListItem]> profile-items: [];
+    in-out property <int> selected-profile-index: -1;
+    in-out property <string> current-profile-name: "Unsaved";
+    in-out property <bool> profile-modified: false;
+    in-out property <string> profile-search: "";
+    in-out property <bool> dialog-open: false;
+    in-out property <string> dialog-title: "";
+    in-out property <string> dialog-message: "";
+    in-out property <bool> dialog-input-visible: false;
+    in-out property <string> dialog-input: "";
+    in-out property <string> dialog-primary-label: "OK";
+    in-out property <string> dialog-secondary-label: "";
+    in-out property <string> dialog-tertiary-label: "";
+
+    in-out property <int> shortcut-number: 1;
+    in-out property <bool> sticky-typing: false;
     in-out property <bool> startup-delay-enabled: false;
     in-out property <bool> stop-after-enabled: false;
     in-out property <int> stop-after-seconds: 60;
@@ -113,8 +136,8 @@ export component AppWindow inherits Window {
     in-out property <bool> breaks-enabled: false;
     in-out property <int> break-min-words: 18;
     in-out property <int> break-max-words: 42;
-    in-out property <int> break-min-seconds: 2;
-    in-out property <int> break-max-seconds: 5;
+    in-out property <int> break-min-milliseconds: 2000;
+    in-out property <int> break-max-milliseconds: 5000;
     in-out property <bool> pauses-enabled: false;
     in-out property <int> pause-min-characters: 120;
     in-out property <int> pause-max-characters: 250;
@@ -128,6 +151,50 @@ export component AppWindow inherits Window {
     callback resume-simulation();
     callback stop-simulation();
     callback reset-simulation();
+    callback settings-edited();
+    callback open-profile-manager();
+    callback profile-search-edited(string);
+    callback profile-selected(int);
+    callback profile-load();
+    callback profile-save();
+    callback profile-save-as();
+    callback profile-new();
+    callback profile-rename();
+    callback profile-duplicate();
+    callback profile-delete();
+    callback profile-default();
+    callback profile-import-files();
+    callback profile-import-folder();
+    callback profile-export();
+    callback profile-refresh();
+    callback dialog-primary();
+    callback dialog-secondary();
+    callback dialog-tertiary();
+
+    changed wpm => { root.settings-edited(); }
+    changed shortcut-number => { root.settings-edited(); }
+    changed sticky-typing => { root.settings-edited(); }
+    changed startup-delay-enabled => { root.settings-edited(); }
+    changed stop-after-enabled => { root.settings-edited(); }
+    changed stop-after-seconds => { root.settings-edited(); }
+    changed loop-enabled => { root.settings-edited(); }
+    changed loop-min-seconds => { root.settings-edited(); }
+    changed loop-max-seconds => { root.settings-edited(); }
+    changed errors-enabled => { root.settings-edited(); }
+    changed error-min-interval => { root.settings-edited(); }
+    changed error-max-interval => { root.settings-edited(); }
+    changed error-min-count => { root.settings-edited(); }
+    changed error-max-count => { root.settings-edited(); }
+    changed breaks-enabled => { root.settings-edited(); }
+    changed break-min-words => { root.settings-edited(); }
+    changed break-max-words => { root.settings-edited(); }
+    changed break-min-milliseconds => { root.settings-edited(); }
+    changed break-max-milliseconds => { root.settings-edited(); }
+    changed pauses-enabled => { root.settings-edited(); }
+    changed pause-min-characters => { root.settings-edited(); }
+    changed pause-max-characters => { root.settings-edited(); }
+    changed pause-min-milliseconds => { root.settings-edited(); }
+    changed pause-max-milliseconds => { root.settings-edited(); }
 
     public function place-editor-caret(offset: int) {
         editor.set-selection-offsets(offset, offset);
@@ -194,6 +261,16 @@ export component AppWindow inherits Window {
 
             Rectangle { horizontal-stretch: 1; background: transparent; }
 
+            JivaroButton {
+                min-width: 178px;
+                max-width: 178px;
+                min-height: 36px;
+                max-height: 36px;
+                label: (root.profile-modified ? "• " : "") + root.current-profile-name;
+                enabled: !root.session-active;
+                clicked => { root.open-profile-manager(); }
+            }
+
             Rectangle {
                 min-width: 184px;
                 max-width: 184px;
@@ -234,13 +311,32 @@ export component AppWindow inherits Window {
                     padding: 20px;
                     spacing: 11px;
 
-                    MetaLabel { text: "01 / TEXT TO PREVIEW"; }
-                    Text {
-                        text: "What should AutoQuill type?";
-                        color: JivaroTheme.text-primary;
-                        font-family: "Inter";
-                        font-size: 23px;
-                        font-weight: 750;
+                    HorizontalLayout {
+                        min-height: 34px;
+                        max-height: 34px;
+                        spacing: 10px;
+                        alignment: center;
+                        VerticalLayout {
+                            spacing: 1px;
+                            MetaLabel { text: "01 / TEXT TO PREVIEW"; }
+                            Text {
+                                text: "What should AutoQuill type?";
+                                color: JivaroTheme.text-primary;
+                                font-family: "Inter";
+                                font-size: 21px;
+                                font-weight: 750;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        JivaroButton {
+                            min-width: 76px;
+                            max-width: 76px;
+                            min-height: 32px;
+                            max-height: 32px;
+                            label: "SAVE";
+                            enabled: !root.session-active;
+                            clicked => { root.profile-save(); }
+                        }
                     }
 
                     HorizontalLayout {
@@ -606,6 +702,16 @@ export component AppWindow inherits Window {
                                 font-size: 11px;
                                 wrap: word-wrap;
                             }
+                            SettingValue {
+                                label: "Shortcut (F-key)";
+                                minimum: 1;
+                                maximum: 12;
+                                value <=> root.shortcut-number;
+                            }
+                            CheckBox {
+                                text: "Sticky target when native typing arrives";
+                                checked <=> root.sticky-typing;
+                            }
                             CheckBox {
                                 text: "2-second startup delay";
                                 checked <=> root.startup-delay-enabled;
@@ -705,12 +811,12 @@ export component AppWindow inherits Window {
                                 max-value <=> root.break-max-words;
                             }
                             SettingRange {
-                                label: "Break seconds";
+                                label: "Break ms";
                                 field-enabled: root.breaks-enabled;
                                 minimum: 0;
-                                maximum: 60;
-                                min-value <=> root.break-min-seconds;
-                                max-value <=> root.break-max-seconds;
+                                maximum: 60000;
+                                min-value <=> root.break-min-milliseconds;
+                                max-value <=> root.break-max-milliseconds;
                             }
 
                             CheckBox {
@@ -735,6 +841,264 @@ export component AppWindow inherits Window {
                             }
                             Rectangle { vertical-stretch: 1; background: transparent; }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.profile-manager-open: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        background: #08090add;
+
+        TouchArea { clicked => { root.profile-manager-open = false; } }
+
+        manager-panel := Rectangle {
+            width: min(root.width - 40px, 880px);
+            height: min(root.height - 40px, 610px);
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            border-radius: 18px;
+            background: JivaroTheme.surface;
+            border-width: 1px;
+            border-color: JivaroTheme.border-strong;
+
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 22px;
+                spacing: 13px;
+
+                HorizontalLayout {
+                    min-height: 50px;
+                    max-height: 50px;
+                    spacing: 12px;
+                    alignment: center;
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text {
+                            text: "PROFILES";
+                            color: JivaroTheme.text-primary;
+                            font-family: "Inter";
+                            font-size: 21px;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: "Your text and every setting, kept together.";
+                            color: JivaroTheme.text-muted;
+                            font-family: "Inter";
+                            font-size: 11px;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    JivaroButton {
+                        label: "REFRESH";
+                        min-width: 84px;
+                        max-width: 84px;
+                        clicked => { root.profile-refresh(); }
+                    }
+                    JivaroButton {
+                        label: "CLOSE";
+                        min-width: 76px;
+                        max-width: 76px;
+                        clicked => { root.profile-manager-open = false; }
+                    }
+                }
+
+                HorizontalLayout {
+                    min-height: 38px;
+                    max-height: 38px;
+                    spacing: 9px;
+                    LineEdit {
+                        horizontal-stretch: 1;
+                        placeholder-text: "Search profiles";
+                        text <=> root.profile-search;
+                        edited => { root.profile-search-edited(self.text); }
+                    }
+                    JivaroButton {
+                        label: "NEW";
+                        min-width: 74px;
+                        max-width: 74px;
+                        primary: true;
+                        clicked => { root.profile-new(); }
+                    }
+                    JivaroButton {
+                        label: "IMPORT FILES";
+                        min-width: 116px;
+                        max-width: 116px;
+                        clicked => { root.profile-import-files(); }
+                    }
+                    JivaroButton {
+                        label: "IMPORT FOLDER";
+                        min-width: 124px;
+                        max-width: 124px;
+                        clicked => { root.profile-import-folder(); }
+                    }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    min-height: 250px;
+                    border-radius: 12px;
+                    background: JivaroTheme.background;
+                    border-width: 1px;
+                    border-color: JivaroTheme.border;
+                    clip: true;
+
+                    ListView {
+                        x: 8px;
+                        y: 8px;
+                        width: parent.width - 16px;
+                        height: parent.height - 16px;
+
+                        for item[index] in root.profile-items: Rectangle {
+                            height: 58px;
+                            border-radius: 9px;
+                            background: root.selected-profile-index == index ? JivaroTheme.accent-soft : transparent;
+                            border-width: root.selected-profile-index == index ? 1px : 0px;
+                            border-color: JivaroTheme.accent;
+
+                            HorizontalLayout {
+                                padding-left: 13px;
+                                padding-right: 13px;
+                                spacing: 11px;
+                                alignment: center;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    horizontal-stretch: 1;
+                                    Text {
+                                        text: item.name;
+                                        color: JivaroTheme.text-primary;
+                                        font-family: "Inter";
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: item.detail;
+                                        color: JivaroTheme.text-muted;
+                                        font-family: "Inter";
+                                        font-size: 10px;
+                                        overflow: elide;
+                                    }
+                                }
+                                Rectangle {
+                                    min-width: 78px;
+                                    max-width: 78px;
+                                    min-height: 24px;
+                                    max-height: 24px;
+                                    border-radius: 7px;
+                                    background: item.badge == "CURRENT" ? JivaroTheme.success-soft : JivaroTheme.surface-raised;
+                                    border-width: 1px;
+                                    border-color: item.badge == "CURRENT" ? JivaroTheme.success : JivaroTheme.border-strong;
+                                    Text {
+                                        text: item.badge;
+                                        color: item.badge == "INVALID" ? JivaroTheme.danger : JivaroTheme.text-secondary;
+                                        font-family: "Consolas";
+                                        font-size: 9px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                            TouchArea {
+                                clicked => { root.profile-selected(index); }
+                                double-clicked => {
+                                    root.profile-selected(index);
+                                    root.profile-load();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    min-height: 38px;
+                    max-height: 38px;
+                    spacing: 8px;
+                    JivaroButton { label: "LOAD"; primary: true; enabled: root.selected-profile-index >= 0; clicked => { root.profile-load(); } }
+                    JivaroButton { label: "SAVE"; clicked => { root.profile-save(); } }
+                    JivaroButton { label: "SAVE AS"; clicked => { root.profile-save-as(); } }
+                    JivaroButton { label: "RENAME"; enabled: root.selected-profile-index >= 0; clicked => { root.profile-rename(); } }
+                    JivaroButton { label: "DUPLICATE"; enabled: root.selected-profile-index >= 0; clicked => { root.profile-duplicate(); } }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                }
+                HorizontalLayout {
+                    min-height: 38px;
+                    max-height: 38px;
+                    spacing: 8px;
+                    JivaroButton { label: "SET DEFAULT"; enabled: root.selected-profile-index >= 0; clicked => { root.profile-default(); } }
+                    JivaroButton { label: "EXPORT"; enabled: root.selected-profile-index >= 0; clicked => { root.profile-export(); } }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    JivaroButton { label: "MOVE TO TRASH"; min-width: 130px; enabled: root.selected-profile-index >= 0; clicked => { root.profile-delete(); } }
+                }
+            }
+        }
+    }
+
+    if root.dialog-open: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        background: #08090ae6;
+
+        dialog-panel := Rectangle {
+            width: min(root.width - 48px, 520px);
+            min-height: root.dialog-input-visible ? 252px : 220px;
+            max-height: self.min-height;
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            border-radius: 17px;
+            background: JivaroTheme.surface;
+            border-width: 1px;
+            border-color: JivaroTheme.border-strong;
+
+            VerticalLayout {
+                padding: 22px;
+                spacing: 14px;
+                Text {
+                    text: root.dialog-title;
+                    color: JivaroTheme.text-primary;
+                    font-family: "Inter";
+                    font-size: 19px;
+                    font-weight: 800;
+                }
+                Text {
+                    text: root.dialog-message;
+                    color: JivaroTheme.text-secondary;
+                    font-family: "Inter";
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    vertical-stretch: 1;
+                }
+                if root.dialog-input-visible: LineEdit {
+                    text <=> root.dialog-input;
+                    placeholder-text: "Profile name";
+                }
+                HorizontalLayout {
+                    min-height: 38px;
+                    max-height: 38px;
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    JivaroButton {
+                        visible: root.dialog-tertiary-label != "";
+                        label: root.dialog-tertiary-label;
+                        clicked => { root.dialog-tertiary(); }
+                    }
+                    JivaroButton {
+                        visible: root.dialog-secondary-label != "";
+                        label: root.dialog-secondary-label;
+                        clicked => { root.dialog-secondary(); }
+                    }
+                    JivaroButton {
+                        label: root.dialog-primary-label;
+                        primary: true;
+                        clicked => { root.dialog-primary(); }
                     }
                 }
             }

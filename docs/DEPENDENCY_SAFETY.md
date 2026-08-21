@@ -20,3 +20,12 @@ public advisory or make a broader claim about crates that were not present in th
 3. Build with `--locked` in an isolated clean environment.
 4. Reject any unexplained network access or executable download during compilation.
 5. Commit `Cargo.toml` and `Cargo.lock` together.
+
+## 2026-08-21 profile file dialogs
+
+Profile import, folder selection, and export use exactly pinned `rfd 0.17.2`. Unused default
+features are disabled. Windows and macOS use their native dialogs; Linux enables only the XDG
+desktop-portal backend. The cross-platform lockfile adds `rfd` and the Linux-only `pollster` helper.
+`rfd` has a small build script that validates the selected Linux backend and requests AppKit
+linking on macOS; inspection confirmed that it performs no network or executable-download work.
+Re-run the dependency-tree and locked cross-platform CI checks before changing this pin.

@@ -26,11 +26,44 @@ fn editor_and_token_chip_accept_real_pointer_and_keyboard_events() {
     });
 
     // The first chip in the row is the Clipboard runtime token.
-    send_mouse_click(&app, 150.0, 196.0);
+    send_mouse_click(&app, 150.0, 180.0);
     let inserted = inserted.borrow();
     let (token, cursor, anchor) = inserted.as_ref().expect("token chip should be clickable");
     assert_eq!(token, "{CLIPBOARD}");
     assert_eq!((*cursor, *anchor), (5, 5));
+
+    let opened = Rc::new(RefCell::new(false));
+    let opened_from_callback = Rc::clone(&opened);
+    app.on_open_profile_manager(move || *opened_from_callback.borrow_mut() = true);
+    scan_for_click(&app, &opened, 520..740, 34..72);
+    assert!(*opened.borrow(), "profile button should be clickable");
+
+    let new_profile = Rc::new(RefCell::new(false));
+    let new_profile_from_callback = Rc::clone(&new_profile);
+    app.on_profile_new(move || *new_profile_from_callback.borrow_mut() = true);
+    app.set_profile_manager_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    scan_for_click(&app, &new_profile, 500..690, 118..160);
+    assert!(
+        *new_profile.borrow(),
+        "profile manager buttons should be clickable"
+    );
+}
+
+fn scan_for_click(
+    app: &AppWindow,
+    result: &Rc<RefCell<bool>>,
+    x: std::ops::Range<i32>,
+    y: std::ops::Range<i32>,
+) {
+    for y in y.step_by(8) {
+        for x in x.clone().step_by(8) {
+            send_mouse_click(app, x as f32, y as f32);
+            if *result.borrow() {
+                return;
+            }
+        }
+    }
 }
 
 fn send_mouse_click(app: &AppWindow, x: f32, y: f32) {

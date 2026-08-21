@@ -246,6 +246,9 @@ Gate: full sessions complete deterministically under manual time without externa
 
 ### 1.4 Profiles and easy manual import
 
+Status: Completed on 2026-08-21. Profiles use schema version 2, retain legacy files until an
+explicit backed-up upgrade, and support multi-file or non-recursive folder import.
+
 Deliverables:
 
 - Define profile schema version 2 with all v0.13 fields and metadata.
@@ -277,6 +280,9 @@ changes.
 
 ### 1.5 Modern Jivaro application UI
 
+Status: Completed for the portable simulation product on 2026-08-21. Platform-specific native
+typing, global shortcut registration, and permission onboarding remain in Phases 2 and 3.
+
 Build the actual product interface now instead of a temporary parity screen:
 
 - Real multiline editor, character/word counts, token insertion menu, and clear action.
@@ -301,6 +307,9 @@ Gate: every portable v0.13 feature can be configured, saved, simulated, paused, 
 reset, and inspected through the modern UI.
 
 ### 1.6 Phase 1 verification and artifact
+
+Status: Windows local gate completed on 2026-08-21. Native macOS/Linux CI and scaling usability
+checks remain before `/dist` is refreshed.
 
 - Run core parity, migration, session scenario, UI-state, and smoke tests.
 - Compile on native Windows, macOS, and Linux CI runners.
@@ -493,9 +502,9 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Port runtime variables and instruction tokenizer`
 - [x] `Port deterministic scheduler and timing model`
 - [x] `Add session state machine and fake input backend`
-- [ ] `Add profile storage and deliberate legacy import`
+- [x] `Add profile storage and deliberate legacy import`
 - [x] `Build reusable Jivaro controls and functional editor`
-- [ ] `Connect settings, profiles, and simulation to the UI`
+- [x] `Connect settings, profiles, and simulation to the UI`
 - [ ] `Complete Phase 1 verification and refresh dist`
 
 Do not begin real Windows injection until item 8 passes. This preserves a portable foundation for

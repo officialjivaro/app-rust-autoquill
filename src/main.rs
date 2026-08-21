@@ -2,20 +2,28 @@
 
 use std::{
     cell::RefCell,
+    path::PathBuf,
     rc::Rc,
     time::{Duration, Instant},
 };
 
 use autoquill::{
     APP_VERSION,
-    domain::{SessionState, SettingsDraft},
+    domain::{
+        ModifierSet, Profile, SessionState, SettingsDraft, Shortcut, ShortcutKey, TargetIntent,
+        TypingSettings,
+    },
     initialize_diagnostics,
+    persistence::{
+        ImportCandidate, ImportConflictPolicy, ProfileStatus, ProfileStore, ProfileSummary,
+    },
     typing::{
         CompileWarning, CompletionReason, EngineUpdate, PreviewOperation, SeededRandom,
         SessionEngine, SessionPlan, SystemRuntimeValues, compile,
     },
     window_title,
 };
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
 
 slint::include_modules!();
 
@@ -28,6 +36,7 @@ fn main() -> Result<(), slint::PlatformError> {
     app.set_app_version(APP_VERSION.into());
     app.set_window_title(window_title().into());
     connect_interactions(&app);
+    connect_profiles(&app);
 
     if std::env::var_os("AUTOQUILL_SMOKE_TEST").is_some() {
         let smoke_text = "Hi[ENTER]";
@@ -59,6 +68,7 @@ fn connect_interactions(app: &AppWindow) {
     app.on_draft_edited(move |text| {
         if let Some(app) = weak_app.upgrade() {
             update_document_summary(&app, text.as_str());
+            app.set_profile_modified(true);
             if !app.get_session_active() {
                 app.set_notice_is_error(false);
                 app.set_notice_text(
@@ -76,6 +86,7 @@ fn connect_interactions(app: &AppWindow) {
             let (updated, caret) = insert_at_selection(&current, token.as_str(), cursor, anchor);
             app.set_draft_text(updated.clone().into());
             update_document_summary(&app, &updated);
+            app.set_profile_modified(true);
             app.invoke_place_editor_caret(caret);
         }
     });
@@ -217,9 +228,829 @@ fn connect_interactions(app: &AppWindow) {
     });
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct ProfileSnapshot {
+    text: String,
+    settings: TypingSettings,
+}
+
+impl ProfileSnapshot {
+    fn from_ui(app: &AppWindow) -> Self {
+        Self {
+            text: app.get_draft_text().to_string(),
+            settings: settings_from_ui(app),
+        }
+    }
+
+    fn into_profile(self, name: &str) -> Profile {
+        Profile::new(name, self.settings, self.text)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum PendingAction {
+    Load(String),
+    New,
+    Close,
+}
+
+#[derive(Debug, Clone)]
+enum DialogAction {
+    SaveAs(Option<PendingAction>),
+    Rename(String),
+    Duplicate(String),
+    Delete(String),
+    Upgrade(Option<PendingAction>),
+    Dirty(PendingAction),
+    Import(Vec<ImportCandidate>),
+}
+
+struct ProfileController {
+    store: ProfileStore,
+    visible: Vec<ProfileSummary>,
+    selected_name: Option<String>,
+    current_name: Option<String>,
+    current_requires_upgrade: bool,
+    baseline: ProfileSnapshot,
+    dialog: Option<DialogAction>,
+}
+
+fn connect_profiles(app: &AppWindow) {
+    let store = match ProfileStore::discover() {
+        Ok(store) => store,
+        Err(error) => {
+            show_error(app, &format!("Profiles are unavailable: {error}"));
+            return;
+        }
+    };
+    let controller = Rc::new(RefCell::new(ProfileController {
+        store,
+        visible: Vec::new(),
+        selected_name: None,
+        current_name: None,
+        current_requires_upgrade: false,
+        baseline: ProfileSnapshot::from_ui(app),
+        dialog: None,
+    }));
+
+    let startup = controller.borrow().store.startup_profile();
+    match startup {
+        Ok(Some(profile)) => apply_loaded_profile(app, &controller, profile),
+        Ok(None) => {
+            controller.borrow_mut().baseline = ProfileSnapshot::from_ui(app);
+            app.set_profile_modified(false);
+        }
+        Err(error) => show_error(
+            app,
+            &format!("The last profile could not be reopened: {error}"),
+        ),
+    }
+    refresh_profile_list(app, &controller);
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_settings_edited(move || {
+        if let Some(app) = weak_app.upgrade() {
+            update_dirty_state(&app, &state);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_open_profile_manager(move || {
+        if let Some(app) = weak_app.upgrade() {
+            update_dirty_state(&app, &state);
+            refresh_profile_list(&app, &state);
+            app.set_advanced_open(false);
+            app.set_profile_manager_open(true);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_refresh(move || {
+        if let Some(app) = weak_app.upgrade() {
+            refresh_profile_list(&app, &state);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_search_edited(move |_| {
+        if let Some(app) = weak_app.upgrade() {
+            state.borrow_mut().selected_name = None;
+            refresh_profile_list(&app, &state);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_selected(move |index| {
+        if let Some(app) = weak_app.upgrade() {
+            let selected = usize::try_from(index).ok().and_then(|index| {
+                state
+                    .borrow()
+                    .visible
+                    .get(index)
+                    .map(|item| item.name.clone())
+            });
+            state.borrow_mut().selected_name = selected;
+            app.set_selected_profile_index(index);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_load(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+        {
+            request_pending(&app, &state, PendingAction::Load(name));
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_new(move || {
+        if let Some(app) = weak_app.upgrade() {
+            request_pending(&app, &state, PendingAction::New);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_save(move || {
+        if let Some(app) = weak_app.upgrade() {
+            begin_save(&app, &state, None);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_save_as(move || {
+        if let Some(app) = weak_app.upgrade() {
+            prompt_save_as(&app, &state, None);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_rename(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+        {
+            show_input_dialog(
+                &app,
+                &state,
+                DialogAction::Rename(name.clone()),
+                "Rename profile",
+                "Choose a new name. The profile contents are not rewritten.",
+                &name,
+                "RENAME",
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_duplicate(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+        {
+            show_input_dialog(
+                &app,
+                &state,
+                DialogAction::Duplicate(name.clone()),
+                "Duplicate profile",
+                "Create an independent copy with a new name.",
+                &format!("{name} Copy"),
+                "DUPLICATE",
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_delete(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+        {
+            show_dialog(
+                &app,
+                &state,
+                DialogAction::Delete(name.clone()),
+                "Move profile to Trash?",
+                &format!(
+                    "'{name}' will be moved to Jivaro/AutoQuill/Data/Trash so it remains recoverable."
+                ),
+                "MOVE TO TRASH",
+                "CANCEL",
+                "",
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_default(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+        {
+            let result = state.borrow().store.set_default(Some(&name));
+            match result {
+                Ok(()) => {
+                    show_notice(&app, &format!("'{name}' is now the default profile."));
+                    refresh_profile_list(&app, &state);
+                }
+                Err(error) => show_error(&app, &error.to_string()),
+            }
+        }
+    });
+
+    connect_import_callbacks(app, &controller);
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_profile_export(move || {
+        if let Some(app) = weak_app.upgrade()
+            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(destination) = rfd::FileDialog::new()
+                .add_filter("AutoQuill profile", &["json"])
+                .set_file_name(format!("{name}.json"))
+                .save_file()
+        {
+            let result = state.borrow().store.export(&name, &destination);
+            match result {
+                Ok(()) => show_notice(&app, &format!("Exported '{name}' without changing it.")),
+                Err(error) => show_error(&app, &error.to_string()),
+            }
+        }
+    });
+
+    connect_dialog_callbacks(app, &controller);
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.window().on_close_requested(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return CloseRequestResponse::HideWindow;
+        };
+        update_dirty_state(&app, &state);
+        if app.get_profile_modified() {
+            request_pending(&app, &state, PendingAction::Close);
+            CloseRequestResponse::KeepWindowShown
+        } else {
+            CloseRequestResponse::HideWindow
+        }
+    });
+}
+
+fn connect_import_callbacks(app: &AppWindow, controller: &Rc<RefCell<ProfileController>>) {
+    let weak_app = app.as_weak();
+    let state = Rc::clone(controller);
+    app.on_profile_import_files(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        if let Some(paths) = rfd::FileDialog::new()
+            .add_filter("AutoQuill profiles", &["json"])
+            .pick_files()
+        {
+            preview_import(&app, &state, paths);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(controller);
+    app.on_profile_import_folder(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+            preview_import(&app, &state, vec![path]);
+        }
+    });
+}
+
+fn preview_import(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    paths: Vec<PathBuf>,
+) {
+    let result = controller.borrow().store.preview_import(&paths);
+    match result {
+        Ok(candidates) if candidates.is_empty() => {
+            show_error(app, "No JSON profiles were found in that selection.");
+        }
+        Ok(candidates) => {
+            let supported = candidates
+                .iter()
+                .filter(|candidate| {
+                    matches!(
+                        candidate.status,
+                        ProfileStatus::Current | ProfileStatus::Legacy
+                    )
+                })
+                .count();
+            let conflicts = candidates
+                .iter()
+                .filter(|candidate| candidate.conflicts)
+                .count();
+            show_dialog(
+                app,
+                controller,
+                DialogAction::Import(candidates),
+                "Import profiles?",
+                &format!(
+                    "{supported} supported profile(s) are ready with {conflicts} name conflict(s). Keep Both is safest; Overwrite replaces only matching names. Nothing opens automatically."
+                ),
+                "KEEP BOTH",
+                "OVERWRITE",
+                "CANCEL",
+            );
+        }
+        Err(error) => show_error(app, &error.to_string()),
+    }
+}
+
+fn connect_dialog_callbacks(app: &AppWindow, controller: &Rc<RefCell<ProfileController>>) {
+    let weak_app = app.as_weak();
+    let state = Rc::clone(controller);
+    app.on_dialog_primary(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        let action = state.borrow_mut().dialog.take();
+        match action {
+            Some(DialogAction::SaveAs(after)) => {
+                let name = app.get_dialog_input().to_string();
+                if save_as(&app, &state, &name) {
+                    dismiss_dialog(&app);
+                    if let Some(after) = after {
+                        execute_pending(&app, &state, after);
+                    }
+                } else {
+                    state.borrow_mut().dialog = Some(DialogAction::SaveAs(after));
+                }
+            }
+            Some(DialogAction::Rename(source)) => {
+                let destination = app.get_dialog_input().to_string();
+                let result = state.borrow().store.rename(&source, &destination);
+                match result {
+                    Ok(destination) => {
+                        if state.borrow().current_name.as_deref() == Some(&source) {
+                            state.borrow_mut().current_name = Some(destination.clone());
+                            app.set_current_profile_name(destination.clone().into());
+                        }
+                        state.borrow_mut().selected_name = Some(destination);
+                        dismiss_dialog(&app);
+                        refresh_profile_list(&app, &state);
+                    }
+                    Err(error) => {
+                        state.borrow_mut().dialog = Some(DialogAction::Rename(source));
+                        show_error(&app, &error.to_string());
+                    }
+                }
+            }
+            Some(DialogAction::Duplicate(source)) => {
+                let destination = app.get_dialog_input().to_string();
+                let result = state.borrow().store.duplicate(&source, &destination);
+                match result {
+                    Ok(destination) => {
+                        state.borrow_mut().selected_name = Some(destination);
+                        dismiss_dialog(&app);
+                        refresh_profile_list(&app, &state);
+                    }
+                    Err(error) => {
+                        state.borrow_mut().dialog = Some(DialogAction::Duplicate(source));
+                        show_error(&app, &error.to_string());
+                    }
+                }
+            }
+            Some(DialogAction::Delete(name)) => {
+                let result = state.borrow().store.move_to_trash(&name);
+                match result {
+                    Ok(path) => {
+                        if state.borrow().current_name.as_deref() == Some(&name) {
+                            execute_pending(&app, &state, PendingAction::New);
+                        }
+                        state.borrow_mut().selected_name = None;
+                        dismiss_dialog(&app);
+                        refresh_profile_list(&app, &state);
+                        show_notice(&app, &format!("Moved '{name}' to {}.", path.display()));
+                    }
+                    Err(error) => show_error(&app, &error.to_string()),
+                }
+            }
+            Some(DialogAction::Upgrade(after)) => {
+                if save_current(&app, &state, true) {
+                    dismiss_dialog(&app);
+                    if let Some(after) = after {
+                        execute_pending(&app, &state, after);
+                    }
+                }
+            }
+            Some(DialogAction::Dirty(pending)) => {
+                begin_save(&app, &state, Some(pending));
+            }
+            Some(DialogAction::Import(candidates)) => {
+                perform_import(&app, &state, &candidates, ImportConflictPolicy::KeepBoth);
+            }
+            None => dismiss_dialog(&app),
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(controller);
+    app.on_dialog_secondary(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        let action = state.borrow_mut().dialog.take();
+        dismiss_dialog(&app);
+        match action {
+            Some(DialogAction::Dirty(pending)) => execute_pending(&app, &state, pending),
+            Some(DialogAction::Import(candidates)) => {
+                perform_import(&app, &state, &candidates, ImportConflictPolicy::Overwrite);
+            }
+            _ => {}
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(controller);
+    app.on_dialog_tertiary(move || {
+        if let Some(app) = weak_app.upgrade() {
+            state.borrow_mut().dialog = None;
+            dismiss_dialog(&app);
+        }
+    });
+}
+
+fn perform_import(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    candidates: &[ImportCandidate],
+    policy: ImportConflictPolicy,
+) {
+    let result = controller.borrow().store.import(candidates, policy);
+    match result {
+        Ok(report) => {
+            dismiss_dialog(app);
+            refresh_profile_list(app, controller);
+            show_notice(
+                app,
+                &format!(
+                    "Imported {} profile(s); skipped {}; {} error(s).",
+                    report.imported.len(),
+                    report.skipped.len(),
+                    report.errors.len()
+                ),
+            );
+        }
+        Err(error) => show_error(app, &error.to_string()),
+    }
+}
+
+fn request_pending(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    pending: PendingAction,
+) {
+    update_dirty_state(app, controller);
+    if app.get_profile_modified() {
+        show_dialog(
+            app,
+            controller,
+            DialogAction::Dirty(pending),
+            "Save your changes?",
+            "This profile has unsaved text or settings. Save it, discard the changes, or cancel.",
+            "SAVE",
+            "DISCARD",
+            "CANCEL",
+        );
+    } else {
+        execute_pending(app, controller, pending);
+    }
+}
+
+fn execute_pending(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    pending: PendingAction,
+) {
+    match pending {
+        PendingAction::Load(name) => {
+            let result = controller.borrow().store.load(&name);
+            match result {
+                Ok(profile) => {
+                    if let Err(error) = controller.borrow().store.remember_loaded(&name) {
+                        show_error(app, &error.to_string());
+                        return;
+                    }
+                    apply_loaded_profile(app, controller, profile);
+                    app.set_profile_manager_open(false);
+                    show_notice(app, &format!("Loaded '{name}'."));
+                }
+                Err(error) => show_error(app, &error.to_string()),
+            }
+        }
+        PendingAction::New => {
+            apply_settings_to_ui(app, &TypingSettings::default());
+            app.set_draft_text("".into());
+            update_document_summary(app, "");
+            app.set_current_profile_name("Unsaved".into());
+            app.set_profile_modified(false);
+            app.set_profile_manager_open(false);
+            let mut state = controller.borrow_mut();
+            state.current_name = None;
+            state.current_requires_upgrade = false;
+            state.baseline = ProfileSnapshot::from_ui(app);
+        }
+        PendingAction::Close => {
+            let _ = app.hide();
+        }
+    }
+}
+
+fn begin_save(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    after: Option<PendingAction>,
+) {
+    let (name, requires_upgrade) = {
+        let state = controller.borrow();
+        (state.current_name.clone(), state.current_requires_upgrade)
+    };
+    match name {
+        None => prompt_save_as(app, controller, after),
+        Some(_) if requires_upgrade => show_dialog(
+            app,
+            controller,
+            DialogAction::Upgrade(after),
+            "Upgrade legacy profile?",
+            "AutoQuill will first create an exact backup in Data/Backups, then save this profile using the current portable format.",
+            "BACK UP & UPGRADE",
+            "CANCEL",
+            "",
+        ),
+        Some(_) => {
+            if save_current(app, controller, false)
+                && let Some(after) = after
+            {
+                execute_pending(app, controller, after);
+            }
+        }
+    }
+}
+
+fn save_current(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    upgrade: bool,
+) -> bool {
+    let Some(name) = controller.borrow().current_name.clone() else {
+        return false;
+    };
+    let snapshot = ProfileSnapshot::from_ui(app);
+    let profile = if upgrade {
+        Profile::from_legacy(&name, snapshot.settings.clone(), snapshot.text.clone())
+    } else {
+        snapshot.clone().into_profile(&name)
+    };
+    let result = if upgrade {
+        controller
+            .borrow()
+            .store
+            .upgrade_legacy(&name, &profile)
+            .map(|_| name.clone())
+    } else {
+        controller.borrow().store.save(&name, &profile)
+    };
+    match result {
+        Ok(_) => {
+            let mut state = controller.borrow_mut();
+            state.baseline = snapshot;
+            state.current_requires_upgrade = false;
+            drop(state);
+            app.set_profile_modified(false);
+            app.set_current_profile_name(name.clone().into());
+            refresh_profile_list(app, controller);
+            show_notice(app, &format!("Saved '{name}'."));
+            true
+        }
+        Err(error) => {
+            show_error(app, &error.to_string());
+            false
+        }
+    }
+}
+
+fn save_as(app: &AppWindow, controller: &Rc<RefCell<ProfileController>>, name: &str) -> bool {
+    let snapshot = ProfileSnapshot::from_ui(app);
+    let profile = snapshot.clone().into_profile(name);
+    let result = controller.borrow().store.save(name, &profile);
+    match result {
+        Ok(name) => {
+            let mut state = controller.borrow_mut();
+            state.current_name = Some(name.clone());
+            state.current_requires_upgrade = false;
+            state.baseline = snapshot;
+            state.selected_name = Some(name.clone());
+            drop(state);
+            app.set_current_profile_name(name.clone().into());
+            app.set_profile_modified(false);
+            refresh_profile_list(app, controller);
+            show_notice(app, &format!("Saved '{name}'."));
+            true
+        }
+        Err(error) => {
+            show_error(app, &error.to_string());
+            false
+        }
+    }
+}
+
+fn prompt_save_as(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    after: Option<PendingAction>,
+) {
+    let suggested = controller
+        .borrow()
+        .current_name
+        .clone()
+        .unwrap_or_else(|| "My Profile".to_owned());
+    show_input_dialog(
+        app,
+        controller,
+        DialogAction::SaveAs(after),
+        "Save profile as",
+        "Save the text and every current setting as one portable JSON profile.",
+        &suggested,
+        "SAVE",
+    );
+}
+
+fn apply_loaded_profile(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    profile: Profile,
+) {
+    let requires_upgrade = profile.requires_upgrade();
+    apply_settings_to_ui(app, &profile.settings);
+    app.set_draft_text(profile.typing_text.clone().into());
+    update_document_summary(app, &profile.typing_text);
+    app.set_current_profile_name(profile.metadata.name.clone().into());
+    app.set_profile_modified(false);
+    let mut state = controller.borrow_mut();
+    state.current_name = Some(profile.metadata.name.clone());
+    state.selected_name = Some(profile.metadata.name);
+    state.current_requires_upgrade = requires_upgrade;
+    state.baseline = ProfileSnapshot::from_ui(app);
+}
+
+fn apply_settings_to_ui(app: &AppWindow, settings: &TypingSettings) {
+    let shortcut_number = match settings.shortcut.key {
+        ShortcutKey::Function(number) => i32::from(number),
+        _ => 1,
+    };
+    app.set_shortcut_number(shortcut_number);
+    app.set_sticky_typing(settings.target == TargetIntent::StickyAuto);
+    app.set_wpm(i32::from(settings.wpm.get()));
+    app.set_startup_delay_enabled(settings.startup_delay_enabled);
+    app.set_stop_after_enabled(settings.stop_after.enabled);
+    app.set_stop_after_seconds(i32::try_from(settings.stop_after.seconds).unwrap_or(i32::MAX));
+    app.set_loop_enabled(settings.looping.enabled);
+    app.set_loop_min_seconds(i32::try_from(settings.looping.min_seconds).unwrap_or(i32::MAX));
+    app.set_loop_max_seconds(i32::try_from(settings.looping.max_seconds).unwrap_or(i32::MAX));
+    app.set_errors_enabled(settings.errors.enabled);
+    app.set_error_min_interval(i32::try_from(settings.errors.min_interval).unwrap_or(i32::MAX));
+    app.set_error_max_interval(i32::try_from(settings.errors.max_interval).unwrap_or(i32::MAX));
+    app.set_error_min_count(i32::try_from(settings.errors.min_errors).unwrap_or(i32::MAX));
+    app.set_error_max_count(i32::try_from(settings.errors.max_errors).unwrap_or(i32::MAX));
+    app.set_breaks_enabled(settings.breaks.enabled);
+    app.set_break_min_words(i32::try_from(settings.breaks.min_words).unwrap_or(i32::MAX));
+    app.set_break_max_words(i32::try_from(settings.breaks.max_words).unwrap_or(i32::MAX));
+    app.set_break_min_milliseconds((settings.breaks.min_seconds * 1_000.0).round() as i32);
+    app.set_break_max_milliseconds((settings.breaks.max_seconds * 1_000.0).round() as i32);
+    app.set_pauses_enabled(settings.pauses.enabled);
+    app.set_pause_min_characters(i32::try_from(settings.pauses.min_characters).unwrap_or(i32::MAX));
+    app.set_pause_max_characters(i32::try_from(settings.pauses.max_characters).unwrap_or(i32::MAX));
+    app.set_pause_min_milliseconds((settings.pauses.min_seconds * 1_000.0).round() as i32);
+    app.set_pause_max_milliseconds((settings.pauses.max_seconds * 1_000.0).round() as i32);
+}
+
+fn update_dirty_state(app: &AppWindow, controller: &Rc<RefCell<ProfileController>>) {
+    app.set_profile_modified(ProfileSnapshot::from_ui(app) != controller.borrow().baseline);
+}
+
+fn refresh_profile_list(app: &AppWindow, controller: &Rc<RefCell<ProfileController>>) {
+    let search = app.get_profile_search().trim().to_lowercase();
+    let result = controller.borrow().store.list();
+    let all = match result {
+        Ok(profiles) => profiles,
+        Err(error) => {
+            show_error(app, &error.to_string());
+            return;
+        }
+    };
+    let selected_name = controller.borrow().selected_name.clone();
+    let visible: Vec<_> = all
+        .into_iter()
+        .filter(|profile| search.is_empty() || profile.name.to_lowercase().contains(&search))
+        .collect();
+    let selected_index = selected_name
+        .as_ref()
+        .and_then(|selected| visible.iter().position(|profile| &profile.name == selected))
+        .and_then(|index| i32::try_from(index).ok())
+        .unwrap_or(-1);
+    let rows: Vec<ProfileListItem> = visible
+        .iter()
+        .map(|profile| {
+            let mut labels = Vec::new();
+            if profile.is_default {
+                labels.push("default");
+            }
+            if profile.is_imported {
+                labels.push("imported");
+            }
+            labels.push(if profile.bytes < 1_024 {
+                "under 1 KB"
+            } else {
+                "portable JSON"
+            });
+            ProfileListItem {
+                name: profile.name.clone().into(),
+                badge: profile.status.badge().into(),
+                detail: labels.join(" • ").into(),
+            }
+        })
+        .collect();
+    controller.borrow_mut().visible = visible;
+    app.set_selected_profile_index(selected_index);
+    app.set_profile_items(ModelRc::new(VecModel::from(rows)));
+}
+
+fn show_input_dialog(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    action: DialogAction,
+    title: &str,
+    message: &str,
+    input: &str,
+    primary: &str,
+) {
+    app.set_dialog_input(input.into());
+    app.set_dialog_input_visible(true);
+    show_dialog(
+        app, controller, action, title, message, primary, "CANCEL", "",
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn show_dialog(
+    app: &AppWindow,
+    controller: &Rc<RefCell<ProfileController>>,
+    action: DialogAction,
+    title: &str,
+    message: &str,
+    primary: &str,
+    secondary: &str,
+    tertiary: &str,
+) {
+    controller.borrow_mut().dialog = Some(action);
+    app.set_dialog_title(title.into());
+    app.set_dialog_message(message.into());
+    app.set_dialog_primary_label(primary.into());
+    app.set_dialog_secondary_label(secondary.into());
+    app.set_dialog_tertiary_label(tertiary.into());
+    if app.get_dialog_input().is_empty() {
+        app.set_dialog_input_visible(false);
+    }
+    app.set_dialog_open(true);
+}
+
+fn dismiss_dialog(app: &AppWindow) {
+    app.set_dialog_open(false);
+    app.set_dialog_input_visible(false);
+    app.set_dialog_input("".into());
+}
+
+fn show_notice(app: &AppWindow, message: &str) {
+    app.set_notice_is_error(false);
+    app.set_notice_text(message.into());
+}
+
 fn settings_from_ui(app: &AppWindow) -> autoquill::domain::TypingSettings {
     SettingsDraft {
+        shortcut: Shortcut::new(
+            ModifierSet::default(),
+            ShortcutKey::Function(u8::try_from(app.get_shortcut_number()).unwrap_or(1)),
+        )
+        .unwrap_or_default(),
         wpm: Some(i64::from(app.get_wpm())),
+        sticky_typing: app.get_sticky_typing(),
         startup_delay_enabled: app.get_startup_delay_enabled(),
         stop_after_enabled: app.get_stop_after_enabled(),
         stop_after_seconds: Some(i64::from(app.get_stop_after_seconds())),
@@ -234,8 +1065,8 @@ fn settings_from_ui(app: &AppWindow) -> autoquill::domain::TypingSettings {
         breaks_enabled: app.get_breaks_enabled(),
         break_min_words: Some(i64::from(app.get_break_min_words())),
         break_max_words: Some(i64::from(app.get_break_max_words())),
-        break_min_seconds: Some(f64::from(app.get_break_min_seconds())),
-        break_max_seconds: Some(f64::from(app.get_break_max_seconds())),
+        break_min_seconds: Some(f64::from(app.get_break_min_milliseconds()) / 1_000.0),
+        break_max_seconds: Some(f64::from(app.get_break_max_milliseconds()) / 1_000.0),
         pauses_enabled: app.get_pauses_enabled(),
         pause_min_characters: Some(i64::from(app.get_pause_min_characters())),
         pause_max_characters: Some(i64::from(app.get_pause_max_characters())),

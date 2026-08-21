@@ -4,7 +4,8 @@ AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop 
 The current source includes a branded, interactive editor and a safe simulation preview backed by
 the portable runtime-variable compiler and deterministic session engine. Start, Pause/Resume,
 Stop, Reset, startup delay, active-time limits, loops, breaks, short pauses, and visible simulated
-corrections are functional. Simulation never emits external keystrokes.
+corrections are functional. Profiles now keep the draft and every setting together, including
+deliberate legacy import and recoverable upgrades. Simulation never emits external keystrokes.
 
 ![AutoQuill Phase 0 shell](docs/phase0-shell.png)
 
@@ -24,6 +25,24 @@ machine.
 
 The current build does **not** listen for global shortcuts or emit keystrokes. Those behaviors will
 be introduced behind tested platform interfaces in later phases.
+
+## Profiles
+
+Open the profile manager from the profile button in the header. It supports search, load, save,
+Save As, rename, duplicate, default selection, export, and recoverable deletion. **Import Files**
+accepts multiple JSON profiles; **Import Folder** scans one selected folder without recursing.
+Imports are previewed and never opened automatically. Name conflicts are kept as separate copies.
+
+AutoQuill uses the same cross-platform location as the original app:
+
+```text
+~/Jivaro/AutoQuill/Data/Saves
+```
+
+On Windows, `~` is `C:\Users\<username>`. Preferences are separate at
+`Data/preferences.json`. Legacy profiles stay byte-for-byte unchanged until you explicitly save
+and approve an upgrade; the original bytes are backed up under `Data/Backups`. Deleted profiles
+move to `Data/Trash`.
 
 ## Prerequisites
 

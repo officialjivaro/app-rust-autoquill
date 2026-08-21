@@ -1,6 +1,8 @@
 # Distribution artifacts
 
-`AutoQuill-windows-x64.exe` is the portable Windows x64 Phase 0 preview.
+`AutoQuill-windows-x64.exe` is the portable Windows x64 Phase 1 alpha.
 
-This foundation build demonstrates the Rust/Slint application shell. It does not yet register
-global shortcuts or emit keystrokes. Verify downloads against `SHA256SUMS.txt`.
+This build includes the modern interactive editor, deterministic safe simulation, complete
+portable settings, schema-v2 profile management, deliberate legacy import, and recoverable profile
+operations. It does not yet register global shortcuts or emit external keystrokes. Verify the
+download against `SHA256SUMS.txt`.

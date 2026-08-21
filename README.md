@@ -12,12 +12,11 @@ deliberate legacy import and recoverable upgrades. Simulation never emits extern
 The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package sequence in
 [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
 
-## Windows preview
+## Windows Phase 1 alpha
 
-The currently published Phase 0 Windows x64 executable is available at
-[`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). This Phase 0 preview displays
-the application shell. Per the release plan, `dist` is refreshed only after the complete Phase 1
-gate. The newest verified local development build is preserved at
+The verified Phase 1 Windows x64 executable is available at
+[`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). It includes the functional safe
+simulation UI and complete portable profile workflow. The same verified build is preserved at
 `local-builds/AutoQuill-windows-x64.exe` (gitignored); build current source to recreate it on a new
 machine.
 

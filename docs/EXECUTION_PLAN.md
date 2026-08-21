@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Phase 1 implementation in progress
+Status: Phase 1 portable product alpha completed; Phase 2 is next
 Last updated: 2026-08-21
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
@@ -308,8 +308,9 @@ reset, and inspected through the modern UI.
 
 ### 1.6 Phase 1 verification and artifact
 
-Status: Windows local gate completed on 2026-08-21. Native macOS/Linux CI and scaling usability
-checks remain before `/dist` is refreshed.
+Status: Automated Phase 1 gate completed on 2026-08-21. Local Windows smoke/size checks and native
+Windows, macOS, and Ubuntu CI passed; `/dist` was refreshed. Manual visual scaling/usability passes
+remain tracked for release hardening.
 
 - Run core parity, migration, session scenario, UI-state, and smoke tests.
 - Compile on native Windows, macOS, and Linux CI runners.
@@ -505,7 +506,7 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Add profile storage and deliberate legacy import`
 - [x] `Build reusable Jivaro controls and functional editor`
 - [x] `Connect settings, profiles, and simulation to the UI`
-- [ ] `Complete Phase 1 verification and refresh dist`
+- [x] `Complete Phase 1 verification and refresh dist`
 
 Do not begin real Windows injection until item 8 passes. This preserves a portable foundation for
 macOS and Linux while removing the duplicated temporary UI phase.

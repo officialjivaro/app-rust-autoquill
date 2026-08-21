@@ -520,6 +520,7 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Add strict Windows foreground capture and Unicode native input`
 - [x] `Add bare F1-F12 global Start/Stop with conflict handling`
 - [x] `Add Simulation/Real Typing mode, per-launch consent, and 2-second countdown`
+- [x] `Publish the verified Phase 2A Windows foreground beta to dist`
 - [ ] `Complete the Windows manual application/input matrix`
 - [ ] `Implement and verify Sticky Auto targeting`
 - [ ] `Complete the Phase 2 Windows gate and refresh dist`

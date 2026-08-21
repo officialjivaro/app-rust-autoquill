@@ -16,7 +16,8 @@ The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package 
 
 The latest verified Windows x64 executable is available at
 [`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). `/dist` is refreshed only after
-the corresponding source gate passes. The same verified build is preserved at
+the corresponding source gate passes. This unsigned beta includes both safe Simulation and the
+opt-in Windows Real Typing flow. The same verified build is preserved at
 `local-builds/AutoQuill-windows-x64.exe` (gitignored); build current source to recreate it on a new
 machine.
 

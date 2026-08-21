@@ -243,6 +243,20 @@ impl<R: RandomSource> SessionEngine<R> {
         self.update(Vec::new())
     }
 
+    /// End an active session after a native backend safety check or input operation fails.
+    pub fn fail(&mut self, action: impl Into<String>) -> EngineUpdate {
+        if self.state.is_active() {
+            self.state = SessionState::Failed;
+            self.wait_kind = WaitKind::None;
+            self.remaining_wait = Duration::ZERO;
+            self.pending_operations.clear();
+            self.pending_waits.clear();
+            self.completion_reason = None;
+            self.current_action = action.into();
+        }
+        self.update(Vec::new())
+    }
+
     pub fn reset(&mut self) -> EngineUpdate {
         self.state = SessionState::Idle;
         self.resume_state = SessionState::Idle;
@@ -639,6 +653,20 @@ mod tests {
         let after_stop = engine.advance(Duration::from_secs(100));
         assert!(after_stop.operations.is_empty());
         assert_eq!(after_stop.snapshot.state, SessionState::Idle);
+    }
+
+    #[test]
+    fn backend_failure_cancels_pending_input_permanently() {
+        let mut engine = SessionEngine::new(SeededRandom::new(34));
+        engine.start(plan("abcdef", fast_settings())).unwrap();
+        let failed = engine.fail("Target focus changed");
+        assert_eq!(failed.snapshot.state, SessionState::Failed);
+        assert_eq!(failed.snapshot.current_action, "Target focus changed");
+        assert!(failed.operations.is_empty());
+
+        let after_failure = engine.advance(Duration::from_secs(100));
+        assert_eq!(after_failure.snapshot.state, SessionState::Failed);
+        assert!(after_failure.operations.is_empty());
     }
 
     #[test]

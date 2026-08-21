@@ -17,6 +17,10 @@ use autoquill::{
     persistence::{
         ImportCandidate, ImportConflictPolicy, ProfileStatus, ProfileStore, ProfileSummary,
     },
+    platform::{
+        ForegroundBackend, ForegroundTarget, HotkeyEvent, HotkeyService,
+        document_uses_activation_key,
+    },
     typing::{
         CompileWarning, CompletionReason, EngineUpdate, PreviewOperation, SeededRandom,
         SessionEngine, SessionPlan, SystemRuntimeValues, compile,
@@ -28,6 +32,13 @@ use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
 slint::include_modules!();
 
 const UI_TICK: Duration = Duration::from_millis(16);
+const HOTKEY_POLL: Duration = Duration::from_millis(25);
+
+#[derive(Debug, Default)]
+struct NativeRunState {
+    backend: ForegroundBackend,
+    target: Option<ForegroundTarget>,
+}
 
 fn main() -> Result<(), slint::PlatformError> {
     initialize_diagnostics();
@@ -63,6 +74,75 @@ fn connect_interactions(app: &AppWindow) {
     ));
     let timer = Rc::new(slint::Timer::default());
     let last_tick = Rc::new(RefCell::new(Instant::now()));
+    let native = Rc::new(RefCell::new(NativeRunState::default()));
+
+    app.set_real_typing_available(ForegroundBackend::available());
+    app.set_real_typing_selected(false);
+    app.set_real_typing_confirmed(false);
+    app.set_target_name("No target captured".into());
+
+    let weak_app = app.as_weak();
+    app.on_choose_simulation(move || {
+        if let Some(app) = weak_app.upgrade() {
+            app.set_real_typing_selected(false);
+            app.set_real_typing_confirm_open(false);
+            app.set_notice_is_error(false);
+            app.set_notice_text("Simulation mode is safe: no keystrokes leave this window.".into());
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_request_real_typing(move || {
+        if let Some(app) = weak_app.upgrade() {
+            if app.get_real_typing_available() {
+                app.set_real_typing_confirm_open(true);
+            } else {
+                show_error(
+                    &app,
+                    "Real Typing is currently available on Windows only. Simulation remains available.",
+                );
+            }
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_confirm_real_typing(move || {
+        if let Some(app) = weak_app.upgrade() {
+            app.set_real_typing_confirm_open(false);
+            app.set_real_typing_confirmed(true);
+            app.set_real_typing_selected(true);
+            app.set_notice_is_error(false);
+            app.set_notice_text(
+                format!(
+                    "Real Typing is armed. Focus the destination app and press F{} to start; press it again to stop.",
+                    app.get_shortcut_number()
+                )
+                .into(),
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_cancel_real_typing(move || {
+        if let Some(app) = weak_app.upgrade() {
+            app.set_real_typing_confirm_open(false);
+            app.set_real_typing_selected(false);
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_real_start_help(move || {
+        if let Some(app) = weak_app.upgrade() {
+            app.set_notice_is_error(false);
+            app.set_notice_text(
+                format!(
+                    "Focus the exact destination window, then press F{}. AutoQuill will capture it and begin after a 2-second countdown.",
+                    app.get_shortcut_number()
+                )
+                .into(),
+            );
+        }
+    });
 
     let weak_app = app.as_weak();
     app.on_draft_edited(move |text| {
@@ -72,7 +152,15 @@ fn connect_interactions(app: &AppWindow) {
             if !app.get_session_active() {
                 app.set_notice_is_error(false);
                 app.set_notice_text(
-                    "Simulation mode is safe: no keystrokes leave this window.".into(),
+                    if app.get_real_typing_selected() {
+                        format!(
+                            "Draft updated. Focus the destination app and press F{} when ready.",
+                            app.get_shortcut_number()
+                        )
+                    } else {
+                        "Simulation mode is safe: no keystrokes leave this window.".into()
+                    }
+                    .into(),
                 );
                 app.set_session_status("READY".into());
             }
@@ -95,6 +183,7 @@ fn connect_interactions(app: &AppWindow) {
     let start_engine = Rc::clone(&engine);
     let start_timer = Rc::clone(&timer);
     let start_last_tick = Rc::clone(&last_tick);
+    let start_native = Rc::clone(&native);
     app.on_start_simulation(move || {
         let Some(app) = weak_app.upgrade() else {
             return;
@@ -116,9 +205,53 @@ fn connect_interactions(app: &AppWindow) {
             }
         };
         let warning_notice = summarize_warnings(&compilation.warnings);
+        let real_typing = app.get_real_typing_selected();
+        let function_key = u8::try_from(app.get_shortcut_number()).unwrap_or(1);
+
+        if real_typing {
+            if !app.get_real_typing_confirmed() {
+                show_error(&app, "Confirm Real Typing before arming native input.");
+                return;
+            }
+            if !app.get_hotkey_ready() {
+                show_error(
+                    &app,
+                    "The selected activation key is unavailable. Choose another F-key in Advanced Settings.",
+                );
+                return;
+            }
+            if document_uses_activation_key(&compilation.instructions, function_key) {
+                show_error(
+                    &app,
+                    &format!(
+                        "This document contains [F{function_key}], which is reserved as the Start/Stop key. Remove that token or choose another activation key."
+                    ),
+                );
+                return;
+            }
+
+            let target = match start_native.borrow().backend.capture_foreground() {
+                Ok(target) => target,
+                Err(error) => {
+                    show_error(&app, &error.to_string());
+                    return;
+                }
+            };
+            app.set_target_name(target.label().into());
+            start_native.borrow_mut().target = Some(target);
+        } else {
+            start_native.borrow_mut().target = None;
+            app.set_target_name("No target captured".into());
+        }
+
+        let mut settings = settings_from_ui(&app);
+        if real_typing {
+            settings.startup_delay_enabled = true;
+            settings.startup_delay_seconds = 2;
+        }
         let plan = SessionPlan {
             instructions: compilation.instructions,
-            settings: settings_from_ui(&app),
+            settings,
         };
 
         start_timer.stop();
@@ -135,7 +268,15 @@ fn connect_interactions(app: &AppWindow) {
         app.set_notice_text(
             warning_notice
                 .unwrap_or_else(|| {
-                    "Safe simulation is running. No native input is being sent.".into()
+                    if real_typing {
+                        format!(
+                            "Target locked: {}. Keep it foreground; F{} stops immediately.",
+                            app.get_target_name(),
+                            app.get_shortcut_number()
+                        )
+                    } else {
+                        "Safe simulation is running. No native input is being sent.".into()
+                    }
                 })
                 .into(),
         );
@@ -149,6 +290,7 @@ fn connect_interactions(app: &AppWindow) {
         let tick_app = app.as_weak();
         let tick_engine = Rc::clone(&start_engine);
         let tick_last_tick = Rc::clone(&start_last_tick);
+        let tick_native = Rc::clone(&start_native);
         let weak_timer = Rc::downgrade(&start_timer);
         start_timer.start(slint::TimerMode::Repeated, UI_TICK, move || {
             let Some(app) = tick_app.upgrade() else {
@@ -158,12 +300,64 @@ fn connect_interactions(app: &AppWindow) {
                 return;
             };
 
+            let real_typing = app.get_real_typing_selected();
+            if real_typing {
+                let validation = {
+                    let native = tick_native.borrow();
+                    native
+                        .target
+                        .as_ref()
+                        .ok_or(autoquill::platform::NativeInputError::NoTarget)
+                        .and_then(|target| native.backend.validate(target))
+                };
+                if let Err(error) = validation {
+                    let update = tick_engine.borrow_mut().fail(error.to_string());
+                    tick_native.borrow_mut().target = None;
+                    app.set_target_name("Target lost".into());
+                    apply_engine_update(&app, &update);
+                    show_error(&app, &error.to_string());
+                    if let Some(timer) = weak_timer.upgrade() {
+                        timer.stop();
+                    }
+                    return;
+                }
+            }
+
             let now = Instant::now();
             let elapsed = now.saturating_duration_since(*tick_last_tick.borrow());
             *tick_last_tick.borrow_mut() = now;
             let update = tick_engine.borrow_mut().advance(elapsed);
+
+            if real_typing {
+                let emission = {
+                    let native = tick_native.borrow();
+                    let target = native
+                        .target
+                        .as_ref()
+                        .ok_or(autoquill::platform::NativeInputError::NoTarget);
+                    target.and_then(|target| {
+                        update
+                            .operations
+                            .iter()
+                            .try_for_each(|operation| native.backend.emit(target, operation))
+                    })
+                };
+                if let Err(error) = emission {
+                    let failed = tick_engine.borrow_mut().fail(error.to_string());
+                    tick_native.borrow_mut().target = None;
+                    app.set_target_name("Input stopped".into());
+                    apply_engine_update(&app, &failed);
+                    show_error(&app, &error.to_string());
+                    if let Some(timer) = weak_timer.upgrade() {
+                        timer.stop();
+                    }
+                    return;
+                }
+            }
+
             apply_engine_update(&app, &update);
             if !update.snapshot.state.is_active() {
+                tick_native.borrow_mut().target = None;
                 apply_completion_notice(&app, update.snapshot.completion_reason);
                 if let Some(timer) = weak_timer.upgrade() {
                     timer.stop();
@@ -194,28 +388,47 @@ fn connect_interactions(app: &AppWindow) {
             let update = resume_engine.borrow_mut().resume();
             apply_engine_update(&app, &update);
             app.set_notice_is_error(false);
-            app.set_notice_text("Safe simulation resumed.".into());
+            app.set_notice_text(
+                if app.get_real_typing_selected() {
+                    "Real Typing resumed. The captured target must remain foreground."
+                } else {
+                    "Safe simulation resumed."
+                }
+                .into(),
+            );
         }
     });
 
     let weak_app = app.as_weak();
     let stop_engine = Rc::clone(&engine);
     let stop_timer = Rc::clone(&timer);
+    let stop_native = Rc::clone(&native);
     app.on_stop_simulation(move || {
         stop_timer.stop();
+        stop_native.borrow_mut().target = None;
         if let Some(app) = weak_app.upgrade() {
+            let was_real_typing = app.get_real_typing_selected();
             let update = stop_engine.borrow_mut().stop();
             apply_engine_update(&app, &update);
             app.set_notice_is_error(false);
-            app.set_notice_text("Simulation stopped safely. You can edit and restart it.".into());
+            app.set_notice_text(
+                if was_real_typing {
+                    "Real Typing stopped immediately. Refocus the destination and press the activation key to start again."
+                } else {
+                    "Simulation stopped safely. You can edit and restart it."
+                }
+                .into(),
+            );
         }
     });
 
     let weak_app = app.as_weak();
     let reset_engine = Rc::clone(&engine);
     let reset_timer = Rc::clone(&timer);
+    let reset_native = Rc::clone(&native);
     app.on_reset_simulation(move || {
         reset_timer.stop();
+        reset_native.borrow_mut().target = None;
         if let Some(app) = weak_app.upgrade() {
             let update = reset_engine.borrow_mut().reset();
             app.set_preview_text("".into());
@@ -226,6 +439,79 @@ fn connect_interactions(app: &AppWindow) {
             );
         }
     });
+
+    connect_hotkey(app);
+}
+
+fn connect_hotkey(app: &AppWindow) {
+    match HotkeyService::start(u8::try_from(app.get_shortcut_number()).unwrap_or(1)) {
+        Ok((service, receiver)) => {
+            let service = Rc::new(service);
+            let receiver = Rc::new(RefCell::new(receiver));
+            let hotkey_timer = Rc::new(slint::Timer::default());
+
+            let weak_app = app.as_weak();
+            let key_service = Rc::clone(&service);
+            let key_timer = Rc::clone(&hotkey_timer);
+            app.on_shortcut_changed(move |number| {
+                let _timer = &key_timer;
+                if let Some(app) = weak_app.upgrade() {
+                    let key = u8::try_from(number).unwrap_or(1);
+                    app.set_hotkey_ready(false);
+                    app.set_hotkey_status(format!("REGISTERING F{key}").into());
+                    if let Err(error) = key_service.set_key(key) {
+                        app.set_hotkey_status("ACTIVATION KEY ERROR".into());
+                        show_error(&app, &error.to_string());
+                    }
+                }
+            });
+
+            let weak_app = app.as_weak();
+            let event_receiver = Rc::clone(&receiver);
+            let keep_service_alive = Rc::clone(&service);
+            let weak_timer = Rc::downgrade(&hotkey_timer);
+            hotkey_timer.start(slint::TimerMode::Repeated, HOTKEY_POLL, move || {
+                let _service = &keep_service_alive;
+                let Some(app) = weak_app.upgrade() else {
+                    if let Some(timer) = weak_timer.upgrade() {
+                        timer.stop();
+                    }
+                    return;
+                };
+                while let Ok(event) = event_receiver.borrow().try_recv() {
+                    match event {
+                        HotkeyEvent::Pressed => {
+                            if app.get_session_active() {
+                                app.invoke_stop_simulation();
+                            } else if app.get_can_start()
+                                && (!app.get_real_typing_selected()
+                                    || app.get_real_typing_confirmed())
+                            {
+                                app.invoke_start_simulation();
+                            }
+                        }
+                        HotkeyEvent::Registered(key) => {
+                            app.set_hotkey_ready(true);
+                            app.set_hotkey_status(format!("F{key} READY • START / STOP").into());
+                        }
+                        HotkeyEvent::RegistrationFailed { key: _, message } => {
+                            app.set_hotkey_ready(false);
+                            app.set_hotkey_status("ACTIVATION KEY UNAVAILABLE".into());
+                            show_error(&app, &message);
+                        }
+                    }
+                }
+            });
+        }
+        Err(error) => {
+            app.set_hotkey_ready(false);
+            app.set_hotkey_status("GLOBAL KEY UNAVAILABLE".into());
+            if ForegroundBackend::available() {
+                show_error(app, &error.to_string());
+            }
+            app.on_shortcut_changed(|_| {});
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1169,6 +1455,7 @@ fn apply_engine_update(app: &AppWindow, update: &EngineUpdate) {
     app.set_session_status(
         match snapshot.state {
             SessionState::Countdown => "COUNTDOWN",
+            SessionState::Typing if app.get_real_typing_selected() => "TYPING",
             SessionState::Typing => "SIMULATING",
             SessionState::LoopWait => "LOOP WAIT",
             SessionState::Paused => "PAUSED",
@@ -1192,14 +1479,22 @@ fn apply_engine_update(app: &AppWindow, update: &EngineUpdate) {
 
 fn apply_completion_notice(app: &AppWindow, reason: Option<CompletionReason>) {
     app.set_notice_is_error(false);
+    let real_typing = app.get_real_typing_selected();
     app.set_notice_text(
         match reason {
+            Some(CompletionReason::StopAfterReached) if real_typing => {
+                "Active-time limit reached. Real Typing stopped safely."
+            }
             Some(CompletionReason::StopAfterReached) => {
                 "Active-time limit reached. The simulation stopped safely."
+            }
+            Some(CompletionReason::UserStopped) if real_typing => {
+                "Real Typing stopped immediately. Refocus the destination to start again."
             }
             Some(CompletionReason::UserStopped) => {
                 "Simulation stopped safely. You can edit and restart it."
             }
+            _ if real_typing => "Real Typing complete. The captured target was released.",
             _ => "Simulation complete — no keystrokes were sent.",
         }
         .into(),

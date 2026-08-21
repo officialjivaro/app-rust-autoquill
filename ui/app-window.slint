@@ -104,6 +104,13 @@ export component AppWindow inherits Window {
     in-out property <string> notice-text: "Simulation mode is safe: no keystrokes leave this window.";
     in-out property <bool> notice-is-error: false;
     in-out property <bool> advanced-open: false;
+    in-out property <bool> real-typing-selected: false;
+    in-out property <bool> real-typing-available: false;
+    in-out property <bool> real-typing-confirmed: false;
+    in-out property <bool> real-typing-confirm-open: false;
+    in-out property <bool> hotkey-ready: false;
+    in-out property <string> hotkey-status: "REGISTERING F1";
+    in-out property <string> target-name: "No target captured";
 
     in-out property <bool> profile-manager-open: false;
     in-out property <[ProfileListItem]> profile-items: [];
@@ -151,6 +158,12 @@ export component AppWindow inherits Window {
     callback resume-simulation();
     callback stop-simulation();
     callback reset-simulation();
+    callback choose-simulation();
+    callback request-real-typing();
+    callback confirm-real-typing();
+    callback cancel-real-typing();
+    callback real-start-help();
+    callback shortcut-changed(int);
     callback settings-edited();
     callback open-profile-manager();
     callback profile-search-edited(string);
@@ -172,7 +185,7 @@ export component AppWindow inherits Window {
     callback dialog-tertiary();
 
     changed wpm => { root.settings-edited(); }
-    changed shortcut-number => { root.settings-edited(); }
+    changed shortcut-number => { root.settings-edited(); root.shortcut-changed(root.shortcut-number); }
     changed sticky-typing => { root.settings-edited(); }
     changed startup-delay-enabled => { root.settings-edited(); }
     changed stop-after-enabled => { root.settings-edited(); }
@@ -204,9 +217,9 @@ export component AppWindow inherits Window {
     title: root.window-title;
     icon: @image-url("../assets/icon.png");
     preferred-width: 960px;
-    preferred-height: 680px;
+    preferred-height: 720px;
     min-width: 780px;
-    min-height: 600px;
+    min-height: 640px;
     background: JivaroTheme.background;
 
     VerticalLayout {
@@ -290,7 +303,58 @@ export component AppWindow inherits Window {
                         dot-color: root.session-paused ? JivaroTheme.warning : (root.session-active ? JivaroTheme.accent : JivaroTheme.success);
                     }
                     MetaLabel {
-                        text: root.session-paused ? "PAUSED SAFELY" : (root.session-active ? "SIMULATING SAFELY" : "INTERACTIVE PREVIEW");
+                        text: root.session-paused ? "PAUSED SAFELY" : (root.session-active ? (root.real-typing-selected ? "TYPING IN TARGET" : "SIMULATING SAFELY") : (root.real-typing-selected ? "REAL TYPING ARMED" : "INTERACTIVE PREVIEW"));
+                    }
+                }
+            }
+        }
+
+        mode-bar := Rectangle {
+            min-height: 54px;
+            max-height: 54px;
+            border-radius: 13px;
+            background: JivaroTheme.surface;
+            border-width: 1px;
+            border-color: root.real-typing-selected ? JivaroTheme.accent : JivaroTheme.border;
+
+            HorizontalLayout {
+                padding: 8px;
+                spacing: 8px;
+                alignment: center;
+
+                JivaroButton {
+                    min-width: 112px;
+                    max-width: 112px;
+                    label: "SIMULATION";
+                    primary: !root.real-typing-selected;
+                    enabled: !root.session-active;
+                    clicked => { root.choose-simulation(); }
+                }
+                JivaroButton {
+                    min-width: 116px;
+                    max-width: 116px;
+                    label: "REAL TYPING";
+                    primary: root.real-typing-selected;
+                    enabled: root.real-typing-available && !root.session-active;
+                    clicked => { root.request-real-typing(); }
+                }
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: root.real-typing-selected ? root.hotkey-status : "SAFE PREVIEW • NOTHING LEAVES AUTOQUILL";
+                        color: root.real-typing-selected && !root.hotkey-ready ? JivaroTheme.warning : JivaroTheme.text-secondary;
+                        font-family: "Consolas";
+                        font-size: 10px;
+                        font-weight: 650;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.real-typing-selected ? (root.session-active ? "LOCKED TO: " + root.target-name : "Focus destination, then press F" + root.shortcut-number) : "Edit, test timing, and verify tokens before using native input.";
+                        color: JivaroTheme.text-muted;
+                        font-family: "Inter";
+                        font-size: 10px;
+                        overflow: elide;
                     }
                 }
             }
@@ -543,14 +607,16 @@ export component AppWindow inherits Window {
 
                         JivaroButton {
                             horizontal-stretch: 1;
-                            label: root.session-paused ? "RESUME" : (root.session-active ? "PAUSE" : "START SIMULATION");
+                            label: root.session-paused ? "RESUME" : (root.session-active ? "PAUSE" : (root.real-typing-selected ? "FOCUS APP • PRESS F" + root.shortcut-number : "START SIMULATION"));
                             primary: true;
-                            enabled: root.session-active || root.can-start;
+                            enabled: root.session-active || (root.can-start && (!root.real-typing-selected || (root.real-typing-confirmed && root.hotkey-ready)));
                             clicked => {
                                 if (root.session-paused) {
                                     root.resume-simulation();
                                 } else if (root.session-active) {
                                     root.pause-simulation();
+                                } else if (root.real-typing-selected) {
+                                    root.real-start-help();
                                 } else {
                                     root.start-simulation();
                                 }
@@ -607,7 +673,7 @@ export component AppWindow inherits Window {
                 max-width: 120px;
             }
             Text {
-                text: "Preview only — global shortcuts and native typing stay disabled.";
+                text: root.real-typing-selected ? "Real Typing is Windows beta • focus changes stop immediately." : "Simulation is the default every launch • no native input.";
                 color: JivaroTheme.text-muted;
                 font-family: "Inter";
                 font-size: 11px;
@@ -1035,6 +1101,85 @@ export component AppWindow inherits Window {
                     JivaroButton { label: "EXPORT"; enabled: root.selected-profile-index >= 0; clicked => { root.profile-export(); } }
                     Rectangle { horizontal-stretch: 1; background: transparent; }
                     JivaroButton { label: "MOVE TO TRASH"; min-width: 130px; enabled: root.selected-profile-index >= 0; clicked => { root.profile-delete(); } }
+                }
+            }
+        }
+    }
+
+    if root.real-typing-confirm-open: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        background: #08090aeb;
+
+        confirm-panel := Rectangle {
+            width: min(root.width - 48px, 560px);
+            min-height: 330px;
+            max-height: 330px;
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            border-radius: 18px;
+            background: JivaroTheme.surface;
+            border-width: 1px;
+            border-color: JivaroTheme.accent;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 15px;
+
+                MetaLabel { text: "WINDOWS BETA • EXPLICIT OPT-IN"; }
+                Text {
+                    text: "ENABLE REAL TYPING?";
+                    color: JivaroTheme.text-primary;
+                    font-family: "Inter";
+                    font-size: 22px;
+                    font-weight: 820;
+                }
+                Text {
+                    text: "AutoQuill will send the prepared actions to whichever external window is foreground when you press F" + root.shortcut-number + ". It waits 2 seconds, then stops immediately if that exact window loses focus or closes.";
+                    color: JivaroTheme.text-secondary;
+                    font-family: "Inter";
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                Rectangle {
+                    min-height: 76px;
+                    max-height: 76px;
+                    border-radius: 10px;
+                    background: JivaroTheme.accent-soft;
+                    border-width: 1px;
+                    border-color: JivaroTheme.accent;
+                    Text {
+                        x: 12px;
+                        y: 9px;
+                        width: parent.width - 24px;
+                        height: parent.height - 18px;
+                        text: "Before starting: preview the document, place the destination cursor carefully, close sensitive fields, and keep your hands ready. Press the same F-key again to stop.";
+                        color: JivaroTheme.text-secondary;
+                        font-family: "Inter";
+                        font-size: 11px;
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle { vertical-stretch: 1; background: transparent; }
+                HorizontalLayout {
+                    min-height: 40px;
+                    max-height: 40px;
+                    spacing: 9px;
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    JivaroButton {
+                        min-width: 110px;
+                        label: "KEEP SIMULATION";
+                        clicked => { root.cancel-real-typing(); }
+                    }
+                    JivaroButton {
+                        min-width: 164px;
+                        label: "I UNDERSTAND • ENABLE";
+                        primary: true;
+                        clicked => { root.confirm-real-typing(); }
+                    }
                 }
             }
         }

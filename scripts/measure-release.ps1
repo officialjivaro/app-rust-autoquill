@@ -23,6 +23,7 @@ $Feature = "renderer-$Renderer"
 & $CargoPath build `
     --manifest-path (Join-Path $ProjectRoot "Cargo.toml") `
     --profile release-size `
+    --locked `
     --no-default-features `
     --features $Feature `
     --target-dir $TargetDir

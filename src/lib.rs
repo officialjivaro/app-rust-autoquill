@@ -5,6 +5,7 @@
 
 pub mod domain;
 pub mod persistence;
+pub mod platform;
 pub mod typing;
 
 /// Name shown throughout the user interface.

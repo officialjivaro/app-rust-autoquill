@@ -1,29 +1,36 @@
 # AutoQuill
 
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
-The current source includes a branded, interactive editor and a safe simulation preview backed by
-the portable runtime-variable compiler and deterministic session engine. Start, Pause/Resume,
-Stop, Reset, startup delay, active-time limits, loops, breaks, short pauses, and visible simulated
-corrections are functional. Profiles now keep the draft and every setting together, including
-deliberate legacy import and recoverable upgrades. Simulation never emits external keystrokes.
+The current source includes a branded, interactive editor, a safe simulation preview, and an
+explicitly armed Windows foreground-typing beta backed by the same portable compiler and session
+engine. Start, Pause/Resume, Stop, Reset, startup delay, active-time limits, loops, breaks, short
+pauses, and visible simulated corrections are functional. Profiles keep the draft and every
+setting together, including deliberate legacy import and recoverable upgrades.
 
 ![AutoQuill Phase 0 shell](docs/phase0-shell.png)
 
 The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package sequence in
 [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
 
-## Windows Phase 1 alpha
+## Windows foreground-typing beta
 
-The verified Phase 1 Windows x64 executable is available at
-[`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). It includes the functional safe
-simulation UI and complete portable profile workflow. The same verified build is preserved at
+The latest verified Windows x64 executable is available at
+[`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). `/dist` is refreshed only after
+the corresponding source gate passes. The same verified build is preserved at
 `local-builds/AutoQuill-windows-x64.exe` (gitignored); build current source to recreate it on a new
 machine.
 
 ## Current safety boundary
 
-The current build does **not** listen for global shortcuts or emit keystrokes. Those behaviors will
-be introduced behind tested platform interfaces in later phases.
+Simulation is selected on every launch and never emits external keystrokes. On Windows, choosing
+**Real Typing** requires an explicit confirmation each launch. Focus the exact destination window
+and press the configured bare F1–F12 key to capture it; the same key stops the session. Real Typing
+always waits two seconds, validates the foreground window before every operation, and stops
+immediately if that window changes or closes. AutoQuill refuses to target itself and blocks a run
+when its activation F-key also appears in the document.
+
+Real Typing is not yet enabled on macOS or Linux. Sticky/background targeting is also deferred;
+this beta deliberately supports strict foreground typing only.
 
 ## Profiles
 
@@ -55,6 +62,13 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo run
+```
+
+The controlled Windows native-input probe is excluded from normal tests. Run it only on an
+interactive desktop where a temporary test window may receive input:
+
+```text
+cargo test --test windows_native_input -- --ignored
 ```
 
 Development and test profiles disable debug-symbol and incremental caches to keep storage usage

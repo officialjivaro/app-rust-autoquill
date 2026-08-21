@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Phase 1 portable product alpha completed; Phase 2 is next
+Status: Phase 2A Windows foreground-typing beta implemented; manual matrix and Sticky Auto remain
 Last updated: 2026-08-21
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
@@ -328,17 +328,24 @@ test mode.
 
 ### 2.1 Native foundation
 
+Status: Implemented on 2026-08-21 for strict Windows foreground typing.
+
 - Use narrowly enabled Microsoft `windows-sys` bindings.
 - Add RAII wrappers for HWND/process handles, attached thread input, and timer resolution.
 - Keep Win32 constants and virtual keys inside `cfg(windows)` modules.
 
 ### 2.2 Foreground input
 
+Status: Implemented on 2026-08-21. Simulation remains the default every launch; Real Typing needs
+explicit per-launch confirmation and a mandatory two-second countdown.
+
 - Port `SendInput` Unicode, including UTF-16 surrogate pairs.
 - Port special-key down/up pairs and extended-key flags.
 - Return detailed errors and stop after the first terminal input failure.
 
 ### 2.3 Sticky Auto targeting
+
+Status: Deferred until foreground typing completes the Windows manual application matrix.
 
 - Capture focused child HWND and root window at Start.
 - Record title, class, process, and browser-like classification.
@@ -348,6 +355,9 @@ test mode.
 - Validate targets before every operation and explain closure/replacement.
 
 ### 2.4 Global shortcuts and Windows product integration
+
+Status: Bare F1–F12 Start/Stop registration, conflict reporting, and unsigned portable packaging
+are implemented. Modifier shortcuts, tray integration, and signing remain deferred.
 
 - Register modifier shortcuts through native Win32 APIs first.
 - Preserve F1–F12 behavior.
@@ -507,9 +517,15 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Build reusable Jivaro controls and functional editor`
 - [x] `Connect settings, profiles, and simulation to the UI`
 - [x] `Complete Phase 1 verification and refresh dist`
+- [x] `Add strict Windows foreground capture and Unicode native input`
+- [x] `Add bare F1-F12 global Start/Stop with conflict handling`
+- [x] `Add Simulation/Real Typing mode, per-launch consent, and 2-second countdown`
+- [ ] `Complete the Windows manual application/input matrix`
+- [ ] `Implement and verify Sticky Auto targeting`
+- [ ] `Complete the Phase 2 Windows gate and refresh dist`
 
-Do not begin real Windows injection until item 8 passes. This preserves a portable foundation for
-macOS and Linux while removing the duplicated temporary UI phase.
+Real Windows injection began only after the Phase 1 gate passed. The manual matrix and Sticky Auto
+remain required before Phase 2 can be declared feature-complete.
 
 ## 11. Plan maintenance
 

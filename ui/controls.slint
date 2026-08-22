@@ -7,7 +7,7 @@ export component JivaroButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked;
 
-    min-height: 38px;
+    min-height: 40px;
     min-width: 92px;
     border-radius: 9px;
     border-width: 1px;
@@ -32,11 +32,11 @@ export component JivaroButton inherits Rectangle {
             root.opacity: 0.72;
         }
         hovered when hitbox.has-hover && root.enabled: {
-            root.background: root.primary ? #e58452 : #2b3035;
+            root.background: root.primary ? JivaroTheme.accent-hover : JivaroTheme.surface-hover;
             root.border-color: root.primary ? #e99a72 : JivaroTheme.text-muted;
         }
         pressed when hitbox.pressed && root.enabled: {
-            root.background: root.primary ? #bd5c31 : JivaroTheme.background;
+            root.background: root.primary ? JivaroTheme.accent-pressed : JivaroTheme.background;
         }
         focused when button-focus.has-focus && root.enabled: {
             focus-ring.border-color: JivaroTheme.accent;
@@ -92,7 +92,7 @@ export component JivaroButton inherits Rectangle {
 }
 
 export component TokenChip inherits JivaroButton {
-    min-height: 31px;
+    min-height: 34px;
     min-width: 98px;
     primary: false;
 }

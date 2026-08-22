@@ -1,4 +1,4 @@
-import { AboutSlint, CheckBox, LineEdit, ListView, SpinBox } from "std-widgets.slint";
+import { AboutSlint, CheckBox, LineEdit, ListView, ScrollView, SpinBox } from "std-widgets.slint";
 import { JivaroButton, JivaroTextEditor, TokenChip } from "controls.slint";
 import { JivaroTheme, MetaLabel, StatusDot } from "theme.slint";
 
@@ -104,6 +104,8 @@ export component AppWindow inherits Window {
     in-out property <string> notice-text: "Simulation mode is safe: no keystrokes leave this window.";
     in-out property <bool> notice-is-error: false;
     in-out property <bool> advanced-open: false;
+    in-out property <bool> session-settings-expanded: true;
+    in-out property <bool> humanize-settings-expanded: true;
     in-out property <bool> real-typing-selected: false;
     in-out property <bool> real-typing-available: false;
     in-out property <bool> real-typing-confirmed: false;
@@ -183,6 +185,7 @@ export component AppWindow inherits Window {
     callback dialog-primary();
     callback dialog-secondary();
     callback dialog-tertiary();
+    callback reset-window();
 
     changed wpm => { root.settings-edited(); }
     changed shortcut-number => { root.settings-edited(); root.shortcut-changed(root.shortcut-number); }
@@ -216,35 +219,56 @@ export component AppWindow inherits Window {
 
     title: root.window-title;
     icon: @image-url("../assets/icon.png");
-    preferred-width: 960px;
+    preferred-width: 1280px;
     preferred-height: 720px;
-    min-width: 780px;
-    min-height: 640px;
+    min-width: 960px;
+    min-height: 600px;
     background: JivaroTheme.background;
+    forward-focus: app-key-handler;
+
+    app-key-handler := FocusScope {
+        width: root.width;
+        height: root.height;
+
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                if (root.dialog-open) {
+                    root.dialog-tertiary();
+                } else if (root.real-typing-confirm-open) {
+                    root.cancel-real-typing();
+                } else if (root.profile-manager-open) {
+                    root.profile-manager-open = false;
+                } else if (root.advanced-open) {
+                    root.advanced-open = false;
+                }
+                return accept;
+            }
+            return reject;
+        }
 
     VerticalLayout {
-        padding: 24px;
-        spacing: 18px;
+        padding: 18px;
+        spacing: 14px;
 
         header := HorizontalLayout {
-            min-height: 58px;
-            max-height: 58px;
-            spacing: 14px;
+            min-height: 50px;
+            max-height: 50px;
+            spacing: 12px;
             alignment: center;
 
             logo-shell := Rectangle {
-                width: 48px;
-                height: 48px;
-                border-radius: 13px;
+                width: 42px;
+                height: 42px;
+                border-radius: 12px;
                 background: JivaroTheme.text-primary;
                 border-width: 1px;
                 border-color: JivaroTheme.border-strong;
 
                 Image {
-                    x: 7px;
-                    y: 7px;
-                    width: 34px;
-                    height: 34px;
+                    x: 6px;
+                    y: 6px;
+                    width: 30px;
+                    height: 30px;
                     source: @image-url("../assets/icon.png");
                     image-fit: contain;
                 }
@@ -258,15 +282,15 @@ export component AppWindow inherits Window {
                     text: "AUTOQUILL";
                     color: JivaroTheme.text-primary;
                     font-family: "Inter";
-                    font-size: 23px;
+                    font-size: 21px;
                     font-weight: 800;
                     letter-spacing: 0.6px;
                 }
                 Text {
-                    text: "WRITE IT ONCE. PREVIEW EVERY ACTION.";
+                    text: "WRITE ONCE. VERIFY EVERY ACTION.";
                     color: JivaroTheme.text-muted;
                     font-family: "Consolas";
-                    font-size: 10px;
+                    font-size: 9px;
                     font-weight: 600;
                     letter-spacing: 1px;
                 }
@@ -275,19 +299,19 @@ export component AppWindow inherits Window {
             Rectangle { horizontal-stretch: 1; background: transparent; }
 
             JivaroButton {
-                min-width: 178px;
-                max-width: 178px;
-                min-height: 36px;
-                max-height: 36px;
+                min-width: 160px;
+                max-width: 160px;
+                min-height: 40px;
+                max-height: 40px;
                 label: (root.profile-modified ? "• " : "") + root.current-profile-name;
                 enabled: !root.session-active;
                 clicked => { root.open-profile-manager(); }
             }
 
             Rectangle {
-                min-width: 184px;
-                max-width: 184px;
-                height: 36px;
+                min-width: 172px;
+                max-width: 172px;
+                height: 40px;
                 border-radius: 10px;
                 background: root.session-active ? JivaroTheme.accent-soft : JivaroTheme.surface;
                 border-width: 1px;
@@ -309,63 +333,23 @@ export component AppWindow inherits Window {
             }
         }
 
-        mode-bar := Rectangle {
-            min-height: 54px;
-            max-height: 54px;
-            border-radius: 13px;
-            background: JivaroTheme.surface;
-            border-width: 1px;
-            border-color: root.real-typing-selected ? JivaroTheme.accent : JivaroTheme.border;
-
-            HorizontalLayout {
-                padding: 8px;
-                spacing: 8px;
-                alignment: center;
-
-                JivaroButton {
-                    min-width: 112px;
-                    max-width: 112px;
-                    label: "SIMULATION";
-                    primary: !root.real-typing-selected;
-                    enabled: !root.session-active;
-                    clicked => { root.choose-simulation(); }
-                }
-                JivaroButton {
-                    min-width: 116px;
-                    max-width: 116px;
-                    label: "REAL TYPING";
-                    primary: root.real-typing-selected;
-                    enabled: root.real-typing-available && !root.session-active;
-                    clicked => { root.request-real-typing(); }
-                }
-                VerticalLayout {
-                    spacing: 2px;
-                    alignment: center;
-                    Text {
-                        text: root.real-typing-selected ? root.hotkey-status : "SAFE PREVIEW • NOTHING LEAVES AUTOQUILL";
-                        color: root.real-typing-selected && !root.hotkey-ready ? JivaroTheme.warning : JivaroTheme.text-secondary;
-                        font-family: "Consolas";
-                        font-size: 10px;
-                        font-weight: 650;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: root.real-typing-selected ? (root.session-active ? "LOCKED TO: " + root.target-name : "Focus destination, then press F" + root.shortcut-number) : "Edit, test timing, and verify tokens before using native input.";
-                        color: JivaroTheme.text-muted;
-                        font-family: "Inter";
-                        font-size: 10px;
-                        overflow: elide;
-                    }
-                }
-            }
-        }
-
-        body := HorizontalLayout {
-            spacing: 16px;
+        body-scroll := ScrollView {
             vertical-stretch: 1;
+            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+            vertical-scrollbar-policy: root.width < 1100px ? ScrollBarPolicy.as-needed : ScrollBarPolicy.always-off;
+            viewport-width: self.visible-width;
+            viewport-height: root.width < 1100px ? 930px : self.visible-height;
+
+            body := GridLayout {
+                width: body-scroll.visible-width;
+                height: body-scroll.viewport-height;
+                spacing: 14px;
 
             editor-card := Rectangle {
+                row: 0;
+                col: 0;
                 horizontal-stretch: 7;
+                vertical-stretch: root.width < 1100px ? 5 : 1;
                 border-radius: 16px;
                 background: JivaroTheme.surface;
                 border-width: 1px;
@@ -485,16 +469,51 @@ export component AppWindow inherits Window {
             }
 
             preview-card := Rectangle {
+                row: root.width < 1100px ? 1 : 0;
+                col: root.width < 1100px ? 0 : 1;
                 horizontal-stretch: 4;
-                min-width: 290px;
+                vertical-stretch: root.width < 1100px ? 4 : 1;
+                min-width: root.width < 1100px ? 0px : 340px;
                 border-radius: 16px;
                 background: JivaroTheme.surface;
                 border-width: 1px;
-                border-color: JivaroTheme.border;
+                border-color: root.real-typing-selected ? JivaroTheme.accent : JivaroTheme.border;
 
                 VerticalLayout {
-                    padding: 18px;
-                    spacing: 9px;
+                    padding: 16px;
+                    spacing: 8px;
+
+                    mode-selector := Rectangle {
+                        min-height: 42px;
+                        max-height: 42px;
+                        border-radius: 11px;
+                        background: JivaroTheme.background;
+                        border-width: 1px;
+                        border-color: root.real-typing-selected ? JivaroTheme.accent : JivaroTheme.border;
+
+                        HorizontalLayout {
+                            padding: 4px;
+                            spacing: 5px;
+                            JivaroButton {
+                                horizontal-stretch: 1;
+                                min-height: 34px;
+                                max-height: 34px;
+                                label: "SIMULATION";
+                                primary: !root.real-typing-selected;
+                                enabled: !root.session-active;
+                                clicked => { root.choose-simulation(); }
+                            }
+                            JivaroButton {
+                                horizontal-stretch: 1;
+                                min-height: 34px;
+                                max-height: 34px;
+                                label: "REAL TYPING";
+                                primary: root.real-typing-selected;
+                                enabled: root.real-typing-available && !root.session-active;
+                                clicked => { root.request-real-typing(); }
+                            }
+                        }
+                    }
 
                     HorizontalLayout {
                         min-height: 18px;
@@ -502,7 +521,7 @@ export component AppWindow inherits Window {
                         alignment: center;
                         spacing: 8px;
 
-                        MetaLabel { text: "02 / SAFE SIMULATION"; }
+                        MetaLabel { text: root.real-typing-selected ? "02 / VALIDATION + TARGET" : "02 / VALIDATION PREVIEW"; }
                         Rectangle { horizontal-stretch: 1; background: transparent; }
                         Text {
                             text: root.session-status;
@@ -514,31 +533,31 @@ export component AppWindow inherits Window {
                     }
 
                     Text {
-                        text: "See every action first.";
+                        text: root.real-typing-selected ? "Verify it, then focus the target." : "See every action before it runs.";
                         color: JivaroTheme.text-primary;
                         font-family: "Inter";
-                        font-size: 20px;
+                        font-size: 18px;
                         font-weight: 750;
                     }
                     Text {
-                        text: "Characters appear as text. Special keys appear between ‹ › markers.";
+                        text: root.real-typing-selected ? (root.session-active ? "Locked to " + root.target-name : "Focus the destination, then press F" + root.shortcut-number + ".") : "Special keys appear between ‹ › markers.";
                         color: JivaroTheme.text-secondary;
                         font-family: "Inter";
-                        font-size: 12px;
+                        font-size: 11px;
                         wrap: word-wrap;
                     }
 
                     JivaroTextEditor {
                         vertical-stretch: 1;
-                        min-height: 125px;
+                        min-height: 90px;
                         text: root.preview-text;
                         read-only: true;
                         placeholder-text: "Your simulation preview appears here.";
                     }
 
                     Rectangle {
-                        min-height: 46px;
-                        max-height: 46px;
+                        min-height: 42px;
+                        max-height: 42px;
                         border-radius: 10px;
                         background: root.session-active ? JivaroTheme.accent-soft : JivaroTheme.background;
                         border-width: 1px;
@@ -547,8 +566,8 @@ export component AppWindow inherits Window {
                         VerticalLayout {
                             padding-left: 12px;
                             padding-right: 12px;
-                            padding-top: 7px;
-                            padding-bottom: 7px;
+                            padding-top: 5px;
+                            padding-bottom: 5px;
                             spacing: 2px;
 
                             MetaLabel { text: "CURRENT ACTION"; }
@@ -601,20 +620,18 @@ export component AppWindow inherits Window {
                     }
 
                     HorizontalLayout {
-                        min-height: 38px;
-                        max-height: 38px;
+                        min-height: 40px;
+                        max-height: 40px;
                         spacing: 8px;
 
                         JivaroButton {
                             horizontal-stretch: 1;
-                            label: root.session-paused ? "RESUME" : (root.session-active ? "PAUSE" : (root.real-typing-selected ? "FOCUS APP • PRESS F" + root.shortcut-number : "START SIMULATION"));
+                            label: root.session-active ? "STOP" : (root.real-typing-selected ? "FOCUS APP • PRESS F" + root.shortcut-number : "START SIMULATION");
                             primary: true;
                             enabled: root.session-active || (root.can-start && (!root.real-typing-selected || (root.real-typing-confirmed && root.hotkey-ready)));
                             clicked => {
-                                if (root.session-paused) {
-                                    root.resume-simulation();
-                                } else if (root.session-active) {
-                                    root.pause-simulation();
+                                if (root.session-active) {
+                                    root.stop-simulation();
                                 } else if (root.real-typing-selected) {
                                     root.real-start-help();
                                 } else {
@@ -623,13 +640,15 @@ export component AppWindow inherits Window {
                             }
                         }
                         JivaroButton {
-                            min-width: 82px;
-                            max-width: 82px;
-                            label: root.session-active ? "STOP" : "RESET";
+                            min-width: 88px;
+                            max-width: 88px;
+                            label: root.session-active ? (root.session-paused ? "RESUME" : "PAUSE") : "RESET";
                             enabled: root.session-active || root.preview-text != "";
                             clicked => {
-                                if (root.session-active) {
-                                    root.stop-simulation();
+                                if (root.session-paused) {
+                                    root.resume-simulation();
+                                } else if (root.session-active) {
+                                    root.pause-simulation();
                                 } else {
                                     root.reset-simulation();
                                 }
@@ -661,22 +680,18 @@ export component AppWindow inherits Window {
                 }
             }
         }
+        }
 
         footer := HorizontalLayout {
-            min-height: 40px;
-            max-height: 40px;
+            min-height: 28px;
+            max-height: 28px;
             spacing: 12px;
             alignment: center;
-
-            AboutSlint {
-                min-width: 120px;
-                max-width: 120px;
-            }
             Text {
                 text: root.real-typing-selected ? "Real Typing is Windows beta • focus changes stop immediately." : "Simulation is the default every launch • no native input.";
                 color: JivaroTheme.text-muted;
                 font-family: "Inter";
-                font-size: 11px;
+                font-size: 10px;
             }
             Rectangle { horizontal-stretch: 1; background: transparent; }
             Text {
@@ -694,15 +709,15 @@ export component AppWindow inherits Window {
         y: 0;
         width: root.width;
         height: root.height;
-        background: #08090acc;
+        background: #08090aaa;
 
         TouchArea { clicked => { root.advanced-open = false; } }
 
         settings-panel := Rectangle {
-            width: min(root.width - 40px, 820px);
-            height: min(root.height - 40px, 570px);
-            x: (root.width - self.width) / 2;
-            y: (root.height - self.height) / 2;
+            width: min(root.width, 480px);
+            height: root.height;
+            x: root.width - self.width;
+            y: 0;
             border-radius: 18px;
             background: JivaroTheme.surface;
             border-width: 1px;
@@ -711,26 +726,26 @@ export component AppWindow inherits Window {
             TouchArea { }
 
             VerticalLayout {
-                padding: 22px;
-                spacing: 14px;
+                padding: 20px;
+                spacing: 12px;
 
                 HorizontalLayout {
-                    min-height: 48px;
-                    max-height: 48px;
+                    min-height: 54px;
+                    max-height: 54px;
                     spacing: 12px;
                     alignment: center;
 
                     VerticalLayout {
                         spacing: 2px;
                         Text {
-                            text: "ADVANCED SESSION SETTINGS";
+                            text: "SESSION SETTINGS";
                             color: JivaroTheme.text-primary;
                             font-family: "Inter";
-                            font-size: 19px;
+                            font-size: 20px;
                             font-weight: 780;
                         }
                         Text {
-                            text: "Optional controls for timing and natural variation. Defaults stay simple.";
+                            text: "Tune behavior without leaving the workspace.";
                             color: JivaroTheme.text-muted;
                             font-family: "Inter";
                             font-size: 11px;
@@ -740,173 +755,256 @@ export component AppWindow inherits Window {
                     JivaroButton {
                         min-width: 74px;
                         max-width: 74px;
+                        min-height: 40px;
+                        max-height: 40px;
                         label: "DONE";
                         clicked => { root.advanced-open = false; }
                     }
                 }
 
-                HorizontalLayout {
-                    spacing: 14px;
+                settings-scroll := ScrollView {
                     vertical-stretch: 1;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                    viewport-width: self.visible-width;
+                    viewport-height: (root.session-settings-expanded ? 430px : 50px) + (root.humanize-settings-expanded ? 430px : 50px) + 12px;
 
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 12px;
-                        background: JivaroTheme.background;
-                        border-width: 1px;
-                        border-color: JivaroTheme.border;
+                    settings-content := VerticalLayout {
+                        width: settings-scroll.visible-width;
+                        height: settings-scroll.viewport-height;
+                        spacing: 12px;
 
-                        VerticalLayout {
-                            padding: 15px;
-                            spacing: 8px;
+                        session-settings := Rectangle {
+                            min-height: root.session-settings-expanded ? 430px : 50px;
+                            max-height: self.min-height;
+                            border-radius: 12px;
+                            background: JivaroTheme.background;
+                            border-width: 1px;
+                            border-color: root.session-settings-expanded ? JivaroTheme.border-strong : JivaroTheme.border;
 
-                            MetaLabel { text: "SESSION"; }
-                            Text {
-                                text: "Control when the run begins, ends, or repeats.";
-                                color: JivaroTheme.text-muted;
-                                font-family: "Inter";
-                                font-size: 11px;
-                                wrap: word-wrap;
-                            }
-                            SettingValue {
-                                label: "Shortcut (F-key)";
-                                minimum: 1;
-                                maximum: 12;
-                                value <=> root.shortcut-number;
-                            }
-                            CheckBox {
-                                text: "Sticky target when native typing arrives";
-                                checked <=> root.sticky-typing;
-                            }
-                            CheckBox {
-                                text: "2-second startup delay";
-                                checked <=> root.startup-delay-enabled;
-                            }
-                            CheckBox {
-                                text: "Stop after active time";
-                                checked <=> root.stop-after-enabled;
-                            }
-                            SettingValue {
-                                label: "Active seconds";
-                                field-enabled: root.stop-after-enabled;
-                                minimum: 1;
-                                maximum: 86400;
-                                value <=> root.stop-after-seconds;
-                            }
-                            CheckBox {
-                                text: "Repeat until stopped";
-                                checked <=> root.loop-enabled;
-                            }
-                            SettingRange {
-                                label: "Wait seconds";
-                                field-enabled: root.loop-enabled;
-                                minimum: 1;
-                                maximum: 86400;
-                                min-value <=> root.loop-min-seconds;
-                                max-value <=> root.loop-max-seconds;
-                            }
+                            HorizontalLayout {
+                                x: 14px;
+                                y: 0;
+                                width: parent.width - 28px;
+                                height: 50px;
+                                alignment: center;
+                                spacing: 8px;
 
-                            Rectangle { min-height: 4px; max-height: 4px; background: transparent; }
-                            Rectangle {
-                                min-height: 70px;
-                                max-height: 70px;
-                                border-radius: 9px;
-                                background: JivaroTheme.accent-soft;
-                                border-width: 1px;
-                                border-color: JivaroTheme.accent;
+                                MetaLabel { text: "TIMING + SESSION"; }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
                                 Text {
-                                    x: 11px;
-                                    y: 9px;
-                                    width: parent.width - 22px;
-                                    height: parent.height - 18px;
-                                    text: "Active time excludes manual pauses. Loop waits reset per-pass progress, matching the original AutoQuill behavior.";
-                                    color: JivaroTheme.text-secondary;
+                                    text: root.session-settings-expanded ? "−" : "+";
+                                    color: JivaroTheme.text-primary;
+                                    font-family: "Inter";
+                                    font-size: 20px;
+                                    font-weight: 700;
+                                }
+                            }
+                            TouchArea {
+                                height: 50px;
+                                clicked => { root.session-settings-expanded = !root.session-settings-expanded; }
+                            }
+
+                            if root.session-settings-expanded: VerticalLayout {
+                                x: 14px;
+                                y: 56px;
+                                width: parent.width - 28px;
+                                height: parent.height - 70px;
+                                spacing: 7px;
+
+                                Text {
+                                    text: "Control activation, duration, repeat behavior, and target intent.";
+                                    color: JivaroTheme.text-muted;
                                     font-family: "Inter";
                                     font-size: 11px;
                                     wrap: word-wrap;
-                                    vertical-alignment: center;
+                                }
+                                SettingValue {
+                                    label: "Shortcut (F-key)";
+                                    minimum: 1;
+                                    maximum: 12;
+                                    value <=> root.shortcut-number;
+                                }
+                                CheckBox {
+                                    text: "Sticky target when native typing arrives";
+                                    checked <=> root.sticky-typing;
+                                }
+                                CheckBox {
+                                    text: "2-second startup delay";
+                                    checked <=> root.startup-delay-enabled;
+                                }
+                                CheckBox {
+                                    text: "Stop after active time";
+                                    checked <=> root.stop-after-enabled;
+                                }
+                                SettingValue {
+                                    label: "Active seconds";
+                                    field-enabled: root.stop-after-enabled;
+                                    minimum: 1;
+                                    maximum: 86400;
+                                    value <=> root.stop-after-seconds;
+                                }
+                                CheckBox {
+                                    text: "Repeat until stopped";
+                                    checked <=> root.loop-enabled;
+                                }
+                                SettingRange {
+                                    label: "Wait seconds";
+                                    field-enabled: root.loop-enabled;
+                                    minimum: 1;
+                                    maximum: 86400;
+                                    min-value <=> root.loop-min-seconds;
+                                    max-value <=> root.loop-max-seconds;
+                                }
+
+                                Rectangle {
+                                    min-height: 64px;
+                                    max-height: 64px;
+                                    border-radius: 9px;
+                                    background: JivaroTheme.accent-soft;
+                                    border-width: 1px;
+                                    border-color: JivaroTheme.accent;
+                                    Text {
+                                        x: 11px;
+                                        y: 8px;
+                                        width: parent.width - 22px;
+                                        height: parent.height - 16px;
+                                        text: "Active time excludes manual pauses. Loop waits reset progress for each pass.";
+                                        color: JivaroTheme.text-secondary;
+                                        font-family: "Inter";
+                                        font-size: 11px;
+                                        wrap: word-wrap;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
-                            Rectangle { vertical-stretch: 1; background: transparent; }
+                        }
+
+                        humanize-settings := Rectangle {
+                            min-height: root.humanize-settings-expanded ? 430px : 50px;
+                            max-height: self.min-height;
+                            border-radius: 12px;
+                            background: JivaroTheme.background;
+                            border-width: 1px;
+                            border-color: root.humanize-settings-expanded ? JivaroTheme.border-strong : JivaroTheme.border;
+
+                            HorizontalLayout {
+                                x: 14px;
+                                y: 0;
+                                width: parent.width - 28px;
+                                height: 50px;
+                                alignment: center;
+                                spacing: 8px;
+
+                                MetaLabel { text: "NATURAL VARIATION"; }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
+                                Text {
+                                    text: root.humanize-settings-expanded ? "−" : "+";
+                                    color: JivaroTheme.text-primary;
+                                    font-family: "Inter";
+                                    font-size: 20px;
+                                    font-weight: 700;
+                                }
+                            }
+                            TouchArea {
+                                height: 50px;
+                                clicked => { root.humanize-settings-expanded = !root.humanize-settings-expanded; }
+                            }
+
+                            if root.humanize-settings-expanded: VerticalLayout {
+                                x: 14px;
+                                y: 56px;
+                                width: parent.width - 28px;
+                                height: parent.height - 70px;
+                                spacing: 5px;
+
+                                CheckBox {
+                                    text: "Simulated mistakes and corrections";
+                                    checked <=> root.errors-enabled;
+                                }
+                                SettingRange {
+                                    label: "Action interval";
+                                    field-enabled: root.errors-enabled;
+                                    minimum: 1;
+                                    maximum: 10000;
+                                    min-value <=> root.error-min-interval;
+                                    max-value <=> root.error-max-interval;
+                                }
+                                SettingRange {
+                                    label: "Mistakes / event";
+                                    field-enabled: root.errors-enabled;
+                                    minimum: 1;
+                                    maximum: 100;
+                                    min-value <=> root.error-min-count;
+                                    max-value <=> root.error-max-count;
+                                }
+
+                                CheckBox {
+                                    text: "Longer word-based breaks";
+                                    checked <=> root.breaks-enabled;
+                                }
+                                SettingRange {
+                                    label: "Word interval";
+                                    field-enabled: root.breaks-enabled;
+                                    minimum: 1;
+                                    maximum: 500;
+                                    min-value <=> root.break-min-words;
+                                    max-value <=> root.break-max-words;
+                                }
+                                SettingRange {
+                                    label: "Break ms";
+                                    field-enabled: root.breaks-enabled;
+                                    minimum: 0;
+                                    maximum: 60000;
+                                    min-value <=> root.break-min-milliseconds;
+                                    max-value <=> root.break-max-milliseconds;
+                                }
+
+                                CheckBox {
+                                    text: "Short character-based pauses";
+                                    checked <=> root.pauses-enabled;
+                                }
+                                SettingRange {
+                                    label: "Character interval";
+                                    field-enabled: root.pauses-enabled;
+                                    minimum: 1;
+                                    maximum: 10000;
+                                    min-value <=> root.pause-min-characters;
+                                    max-value <=> root.pause-max-characters;
+                                }
+                                SettingRange {
+                                    label: "Pause ms";
+                                    field-enabled: root.pauses-enabled;
+                                    minimum: 0;
+                                    maximum: 60000;
+                                    min-value <=> root.pause-min-milliseconds;
+                                    max-value <=> root.pause-max-milliseconds;
+                                }
+                            }
                         }
                     }
+                }
 
-                    Rectangle {
+                HorizontalLayout {
+                    min-height: 42px;
+                    max-height: 42px;
+                    spacing: 8px;
+
+                    AboutSlint {
+                        min-width: 100px;
+                        max-width: 100px;
+                    }
+                    JivaroButton {
                         horizontal-stretch: 1;
-                        border-radius: 12px;
-                        background: JivaroTheme.background;
-                        border-width: 1px;
-                        border-color: JivaroTheme.border;
-
-                        VerticalLayout {
-                            padding: 15px;
-                            spacing: 5px;
-
-                            MetaLabel { text: "HUMANIZE"; }
-                            CheckBox {
-                                text: "Simulated mistakes and corrections";
-                                checked <=> root.errors-enabled;
-                            }
-                            SettingRange {
-                                label: "Action interval";
-                                field-enabled: root.errors-enabled;
-                                minimum: 1;
-                                maximum: 10000;
-                                min-value <=> root.error-min-interval;
-                                max-value <=> root.error-max-interval;
-                            }
-                            SettingRange {
-                                label: "Mistakes / event";
-                                field-enabled: root.errors-enabled;
-                                minimum: 1;
-                                maximum: 100;
-                                min-value <=> root.error-min-count;
-                                max-value <=> root.error-max-count;
-                            }
-
-                            CheckBox {
-                                text: "Longer word-based breaks";
-                                checked <=> root.breaks-enabled;
-                            }
-                            SettingRange {
-                                label: "Word interval";
-                                field-enabled: root.breaks-enabled;
-                                minimum: 1;
-                                maximum: 500;
-                                min-value <=> root.break-min-words;
-                                max-value <=> root.break-max-words;
-                            }
-                            SettingRange {
-                                label: "Break ms";
-                                field-enabled: root.breaks-enabled;
-                                minimum: 0;
-                                maximum: 60000;
-                                min-value <=> root.break-min-milliseconds;
-                                max-value <=> root.break-max-milliseconds;
-                            }
-
-                            CheckBox {
-                                text: "Short character-based pauses";
-                                checked <=> root.pauses-enabled;
-                            }
-                            SettingRange {
-                                label: "Character interval";
-                                field-enabled: root.pauses-enabled;
-                                minimum: 1;
-                                maximum: 10000;
-                                min-value <=> root.pause-min-characters;
-                                max-value <=> root.pause-max-characters;
-                            }
-                            SettingRange {
-                                label: "Pause ms";
-                                field-enabled: root.pauses-enabled;
-                                minimum: 0;
-                                maximum: 60000;
-                                min-value <=> root.pause-min-milliseconds;
-                                max-value <=> root.pause-max-milliseconds;
-                            }
-                            Rectangle { vertical-stretch: 1; background: transparent; }
-                        }
+                        label: "RESET WINDOW";
+                        clicked => { root.reset-window(); }
+                    }
+                    JivaroButton {
+                        min-width: 110px;
+                        max-width: 110px;
+                        label: "DONE";
+                        primary: true;
+                        clicked => { root.advanced-open = false; }
                     }
                 }
             }
@@ -1249,4 +1347,5 @@ export component AppWindow inherits Window {
             }
         }
     }
+}
 }

@@ -3,12 +3,12 @@
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
 The current source includes a branded, interactive editor, a safe simulation preview, and an
 explicitly armed Windows foreground-typing beta backed by the same portable compiler and session
-engine. The Windows reliability matrix covers Notepad, Edge, Chrome, target loss, and global-key
-stress. Start, Pause/Resume, Stop, Reset, startup delay, active-time limits, loops, breaks, short
-pauses, and visible simulated corrections are functional. Profiles keep the draft and every
-setting together, including deliberate legacy import and recoverable upgrades.
-
-![AutoQuill Phase 0 shell](docs/phase0-shell.png)
+engine. The responsive interface opens at 1280×720, scales freely down to a usable 960×600
+minimum, and converts from an editor-first two-column workspace to a scrollable stacked layout at
+narrow widths. The Windows reliability matrix covers Notepad, Edge, Chrome, target loss, and
+global-key stress. Start/Stop, Pause/Resume, Reset, startup delay, active-time limits, loops,
+breaks, short pauses, and visible simulated corrections are functional. Profiles keep the draft
+and every setting together, including deliberate legacy import and recoverable upgrades.
 
 The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package sequence in
 [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
@@ -50,9 +50,21 @@ AutoQuill uses the same cross-platform location as the original app:
 ```
 
 On Windows, `~` is `C:\Users\<username>`. Preferences are separate at
-`Data/preferences.json`. Legacy profiles stay byte-for-byte unchanged until you explicitly save
-and approve an upgrade; the original bytes are backed up under `Data/Backups`. Deleted profiles
-move to `Data/Trash`.
+`Data/preferences.json`; they also remember the last usable window size and position. Use **Reset
+Window** in the settings drawer to return to a centered 1280×720 window. Legacy profiles stay
+byte-for-byte unchanged until you explicitly save and approve an upgrade; the original bytes are
+backed up under `Data/Backups`. Deleted profiles move to `Data/Trash`.
+
+## Responsive interface
+
+- The editor remains the dominant workspace and the validation preview remains visible in both
+  Simulation and Real Typing modes.
+- The primary Start action becomes Stop while a session is active; Pause/Resume remains secondary.
+- Common WPM and token controls stay beside the editor. Optional session and natural-variation
+  controls live in a collapsible right-side drawer.
+- Narrow windows stack the editor above the run panel and provide vertical scrolling instead of
+  clipping controls.
+- Escape closes the topmost settings drawer, profile manager, confirmation, or dialog.
 
 ## Prerequisites
 

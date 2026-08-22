@@ -36,15 +36,37 @@ pub struct Preferences {
     pub last_profile: Option<String>,
     pub default_profile: Option<String>,
     pub imported_profiles: Vec<String>,
+    pub window: WindowPreferences,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WindowPreferences {
+    pub width: u32,
+    pub height: u32,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+}
+
+impl Default for WindowPreferences {
+    fn default() -> Self {
+        Self {
+            width: 1280,
+            height: 720,
+            x: None,
+            y: None,
+        }
+    }
 }
 
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            schema_version: 1,
+            schema_version: 2,
             last_profile: None,
             default_profile: None,
             imported_profiles: Vec::new(),
+            window: WindowPreferences::default(),
         }
     }
 }
@@ -336,5 +358,15 @@ mod tests {
         let bytes = br#"{"schema_version":99,"settings":{}}"#;
         assert_eq!(inspect_profile(bytes), ProfileStatus::Newer(99));
         assert!(parse_profile("Future", bytes).is_err());
+    }
+
+    #[test]
+    fn legacy_preferences_gain_safe_window_defaults() {
+        let preferences: Preferences = serde_json::from_slice(
+            br#"{"schema_version":1,"last_profile":"Daily","default_profile":null}"#,
+        )
+        .unwrap();
+        assert_eq!(preferences.last_profile.as_deref(), Some("Daily"));
+        assert_eq!(preferences.window, WindowPreferences::default());
     }
 }

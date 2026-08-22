@@ -16,6 +16,7 @@ use autoquill::{
     initialize_diagnostics,
     persistence::{
         ImportCandidate, ImportConflictPolicy, ProfileStatus, ProfileStore, ProfileSummary,
+        WindowPreferences,
     },
     platform::{
         ForegroundBackend, ForegroundTarget, HotkeyEvent, HotkeyService,
@@ -27,13 +28,22 @@ use autoquill::{
     },
     window_title,
 };
-use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
+use slint::{
+    CloseRequestResponse, ComponentHandle, LogicalSize, ModelRc, PhysicalPosition, PhysicalSize,
+    VecModel,
+};
 
 slint::include_modules!();
 
 const UI_TICK: Duration = Duration::from_millis(16);
 const HOTKEY_POLL: Duration = Duration::from_millis(25);
 const HOTKEY_RESTART_SUPPRESSION: Duration = Duration::from_millis(300);
+const DEFAULT_WINDOW_WIDTH: u32 = 1280;
+const DEFAULT_WINDOW_HEIGHT: u32 = 720;
+const MIN_WINDOW_WIDTH: u32 = 960;
+const MIN_WINDOW_HEIGHT: u32 = 600;
+const MAX_WINDOW_WIDTH: u32 = 7680;
+const MAX_WINDOW_HEIGHT: u32 = 4320;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActivationAction {
@@ -87,6 +97,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let app = AppWindow::new()?;
     app.set_app_version(APP_VERSION.into());
     app.set_window_title(window_title().into());
+    restore_window_preferences(&app);
     connect_interactions(&app);
     connect_profiles(&app);
 
@@ -107,6 +118,119 @@ fn main() -> Result<(), slint::PlatformError> {
     } else {
         app.run()
     }
+}
+
+fn restore_window_preferences(app: &AppWindow) {
+    let Ok(store) = ProfileStore::discover() else {
+        return;
+    };
+    let Ok(preferences) = store.load_preferences() else {
+        return;
+    };
+    let width = preferences
+        .window
+        .width
+        .clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
+    let height = preferences
+        .window
+        .height
+        .clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT);
+    app.window()
+        .set_size(LogicalSize::new(width as f32, height as f32));
+
+    if let (Some(x), Some(y)) = (preferences.window.x, preferences.window.y) {
+        let position = PhysicalPosition::new(x, y);
+        let scale_factor = app.window().scale_factor();
+        let physical_size =
+            LogicalSize::new(width as f32, height as f32).to_physical(scale_factor.max(1.0));
+        if window_position_is_visible(position, physical_size) {
+            app.window().set_position(position);
+        }
+    }
+}
+
+fn save_window_preferences(app: &AppWindow, store: &ProfileStore) {
+    let Ok(mut preferences) = store.load_preferences() else {
+        return;
+    };
+    let window = app.window();
+    let scale_factor = window.scale_factor().max(1.0);
+    let logical_size = window.size().to_logical(scale_factor);
+    let width = logical_size.width.round() as u32;
+    let height = logical_size.height.round() as u32;
+    preferences.schema_version = 2;
+    preferences.window = WindowPreferences {
+        width: width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+        height: height.clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT),
+        x: None,
+        y: None,
+    };
+
+    let position = window.position();
+    if window_position_is_visible(position, window.size()) {
+        preferences.window.x = Some(position.x);
+        preferences.window.y = Some(position.y);
+    }
+    let _ = store.save_preferences(&preferences);
+}
+
+fn reset_window(app: &AppWindow, store: &ProfileStore) {
+    app.window().set_size(LogicalSize::new(
+        DEFAULT_WINDOW_WIDTH as f32,
+        DEFAULT_WINDOW_HEIGHT as f32,
+    ));
+    center_window_on_primary(app);
+    save_window_preferences(app, store);
+    app.set_notice_is_error(false);
+    app.set_notice_text("Window restored to 1280 × 720 and centered safely.".into());
+}
+
+#[cfg(windows)]
+fn window_position_is_visible(position: PhysicalPosition, size: PhysicalSize) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+
+    let left = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) } as i64;
+    let top = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) } as i64;
+    let right = left + i64::from(unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) });
+    let bottom = top + i64::from(unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) });
+    let x = i64::from(position.x);
+    let y = i64::from(position.y);
+    let window_right = x + i64::from(size.width);
+    let window_bottom = y + i64::from(size.height);
+    const MIN_VISIBLE: i64 = 64;
+
+    window_right >= left + MIN_VISIBLE
+        && x <= right - MIN_VISIBLE
+        && window_bottom >= top + MIN_VISIBLE
+        && y <= bottom - MIN_VISIBLE
+}
+
+#[cfg(not(windows))]
+fn window_position_is_visible(position: PhysicalPosition, _size: PhysicalSize) -> bool {
+    position.x.abs() <= 32_768 && position.y.abs() <= 32_768
+}
+
+#[cfg(windows)]
+fn center_window_on_primary(app: &AppWindow) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+
+    let screen_width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    let screen_height = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    let scale_factor = app.window().scale_factor().max(1.0);
+    let desired = LogicalSize::new(DEFAULT_WINDOW_WIDTH as f32, DEFAULT_WINDOW_HEIGHT as f32)
+        .to_physical(scale_factor);
+    let x = (screen_width - i32::try_from(desired.width).unwrap_or(screen_width)).max(0) / 2;
+    let y = (screen_height - i32::try_from(desired.height).unwrap_or(screen_height)).max(0) / 2;
+    app.window().set_position(PhysicalPosition::new(x, y));
+}
+
+#[cfg(not(windows))]
+fn center_window_on_primary(_app: &AppWindow) {
+    // Wayland does not permit applications to set their own position. Other window managers can
+    // choose the safest placement after the size is reset.
 }
 
 fn connect_interactions(app: &AppWindow) {
@@ -633,6 +757,14 @@ fn connect_profiles(app: &AppWindow) {
         dialog: None,
     }));
 
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_reset_window(move || {
+        if let Some(app) = weak_app.upgrade() {
+            reset_window(&app, &state.borrow().store);
+        }
+    });
+
     let startup = controller.borrow().store.startup_profile();
     match startup {
         Ok(Some(profile)) => apply_loaded_profile(app, &controller, profile),
@@ -840,6 +972,7 @@ fn connect_profiles(app: &AppWindow) {
             request_pending(&app, &state, PendingAction::Close);
             CloseRequestResponse::KeepWindowShown
         } else {
+            save_window_preferences(&app, &state.borrow().store);
             CloseRequestResponse::HideWindow
         }
     });
@@ -1108,6 +1241,7 @@ fn execute_pending(
             state.baseline = ProfileSnapshot::from_ui(app);
         }
         PendingAction::Close => {
+            save_window_preferences(app, &controller.borrow().store);
             let _ = app.hide();
         }
     }

@@ -7,15 +7,15 @@ use slint::platform::{PointerEventButton, WindowEvent};
 slint::include_modules!();
 
 #[test]
-fn editor_and_token_chip_accept_real_pointer_and_keyboard_events() {
+fn editor_pointer_keyboard_and_token_action_are_interactive() {
     init_no_event_loop();
     let app = AppWindow::new().expect("testing backend should create the window");
-    app.window().set_size(slint::PhysicalSize::new(960, 720));
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
     app.show().expect("testing backend should show the window");
     mock_elapsed_time(Duration::ZERO);
 
     // The editor occupies the large left card below the token row.
-    send_mouse_click(&app, 180.0, 372.0);
+    send_mouse_click(&app, 220.0, 390.0);
     send_keyboard_string_sequence(&app, "Hello");
     assert_eq!(app.get_draft_text().as_str(), "Hello");
 
@@ -25,8 +25,10 @@ fn editor_and_token_chip_accept_real_pointer_and_keyboard_events() {
         *inserted_from_callback.borrow_mut() = Some((token.to_string(), cursor, anchor));
     });
 
-    // The first chip in the row is the Clipboard runtime token.
-    send_mouse_click(&app, 150.0, 252.0);
+    ElementHandle::find_by_accessible_label(&app, "{CLIPBOARD}")
+        .next()
+        .expect("Clipboard token chip should be exposed to accessibility")
+        .invoke_accessible_default_action();
     {
         let inserted = inserted.borrow();
         let (token, cursor, anchor) = inserted.as_ref().expect("token chip should be clickable");
@@ -37,7 +39,10 @@ fn editor_and_token_chip_accept_real_pointer_and_keyboard_events() {
     let opened = Rc::new(RefCell::new(false));
     let opened_from_callback = Rc::clone(&opened);
     app.on_open_profile_manager(move || *opened_from_callback.borrow_mut() = true);
-    scan_for_click(&app, &opened, 520..740, 34..72);
+    ElementHandle::find_by_accessible_label(&app, "Unsaved")
+        .next()
+        .expect("profile selector should be exposed to accessibility")
+        .invoke_accessible_default_action();
     assert!(*opened.borrow(), "profile button should be clickable");
 
     let new_profile = Rc::new(RefCell::new(false));
@@ -59,7 +64,7 @@ fn editor_and_token_chip_accept_real_pointer_and_keyboard_events() {
 fn real_typing_mode_and_confirmation_accept_pointer_input() {
     init_no_event_loop();
     let app = AppWindow::new().expect("testing backend should create the window");
-    app.window().set_size(slint::PhysicalSize::new(960, 720));
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
     app.set_real_typing_available(true);
     app.show().expect("testing backend should show the window");
     mock_elapsed_time(Duration::ZERO);
@@ -67,7 +72,7 @@ fn real_typing_mode_and_confirmation_accept_pointer_input() {
     let requested = Rc::new(RefCell::new(false));
     let requested_from_callback = Rc::clone(&requested);
     app.on_request_real_typing(move || *requested_from_callback.borrow_mut() = true);
-    scan_for_click(&app, &requested, 100..360, 75..200);
+    scan_for_click(&app, &requested, 820..1260, 80..180);
     assert!(*requested.borrow(), "Real Typing mode should be clickable");
 
     let confirmed = Rc::new(RefCell::new(false));
@@ -83,6 +88,35 @@ fn real_typing_mode_and_confirmation_accept_pointer_input() {
         *confirmed.borrow(),
         "Real Typing confirmation should require an explicit click"
     );
+}
+
+#[test]
+fn minimum_size_keeps_the_stacked_workspace_and_drawer_accessible() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(960, 600));
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::ZERO);
+
+    for label in ["Text to preview", "SETTINGS"] {
+        assert!(
+            ElementHandle::find_by_accessible_label(&app, label)
+                .next()
+                .is_some(),
+            "{label} should remain accessible in the minimum-size layout"
+        );
+    }
+
+    let reset_requested = Rc::new(RefCell::new(false));
+    let callback_flag = Rc::clone(&reset_requested);
+    app.on_reset_window(move || *callback_flag.borrow_mut() = true);
+    app.set_advanced_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    ElementHandle::find_by_accessible_label(&app, "RESET WINDOW")
+        .next()
+        .expect("window reset should be exposed in the settings drawer")
+        .invoke_accessible_default_action();
+    assert!(*reset_requested.borrow());
 }
 
 fn scan_for_click(

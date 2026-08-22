@@ -38,5 +38,12 @@ Version: `0.15.0-beta.1`
 - The explicit controlled Windows native-input probe passed against its temporary text box.
 - The self-closing real-window smoke test passed using the default software renderer.
 
-Release executable size, checksum, source commit, and CI evidence are recorded when `/dist` is
-refreshed from the verified source commit.
+## Release evidence
+
+- Verified source commit: `ea506a383fb08a84ab2cfd4232bbbb4a5ec5def6`.
+- Optimized Windows x64 executable: 9,758,720 bytes (about 9.31 MiB), an increase of 80,384 bytes
+  from the Phase 2B build.
+- SHA-256: `F8ED1F0B0920E4A77A6EEC92C32282692485CA70773E1EA454C656AD75F4AFB6`.
+- The optimized self-closing smoke test passed before publication.
+- The verified executable is published to `dist/AutoQuill-windows-x64.exe` and preserved in the
+  gitignored `local-builds` backup with a matching hash.

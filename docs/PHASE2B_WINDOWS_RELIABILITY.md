@@ -53,8 +53,13 @@ The result is therefore recorded as a limitation rather than presented as a stab
 
 ## Release evidence
 
-- Source commit: pending.
-- GitHub Actions: pending.
-- Windows x64 executable size: pending.
-- SHA-256: pending.
-- Cleanup result: pending.
+- Source commit: `7b64e4735a8e1796eeb42ae035300ceb34d6c9ea`.
+- GitHub Actions run `32548656902` passed Windows format/lint/tests and optimized release builds on
+  native Windows, macOS, and Ubuntu runners.
+- Windows x64 executable: 9,678,336 bytes (about 9.23 MiB), an increase of 512 bytes from Phase 2A.
+- Locked hidden smoke test: 1,741 milliseconds.
+- SHA-256: `6ADC3B1E4B5CD4283D31B3073FA1CC555971DA87E4E0D285B8D002990AC3E207`.
+- Published to `dist/AutoQuill-windows-x64.exe` and preserved in the gitignored `local-builds`
+  backup with matching hashes.
+- Cleanup removed 8,839 Cargo artifact files totaling 4.3 GiB. The project measured 34.73 MiB
+  afterward, the generated `target` directory was gone, and both verified executables remained.

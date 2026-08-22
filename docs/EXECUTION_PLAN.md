@@ -529,7 +529,7 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Add Simulation/Real Typing mode, per-launch consent, and 2-second countdown`
 - [x] `Publish the verified Phase 2A Windows foreground beta to dist`
 - [x] `Complete the Windows foreground reliability/input matrix`
-- [ ] `Publish the verified Phase 2B Windows reliability beta to dist`
+- [x] `Publish the verified Phase 2B Windows reliability beta to dist`
 - [ ] `Implement and verify Sticky Auto targeting`
 - [ ] `Complete the Phase 2 Windows gate and refresh dist`
 

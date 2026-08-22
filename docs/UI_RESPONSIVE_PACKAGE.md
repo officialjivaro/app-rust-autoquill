@@ -40,7 +40,7 @@ Version: `0.15.0-beta.1`
 
 ## Release evidence
 
-- Verified source commit: `ea506a383fb08a84ab2cfd4232bbbb4a5ec5def6`.
+- Verified source commit: `5c65ad70e3732c9aeaecae564ca2df3eb9ccaec5`.
 - Optimized Windows x64 executable: 9,758,720 bytes (about 9.31 MiB), an increase of 80,384 bytes
   from the Phase 2B build.
 - SHA-256: `F8ED1F0B0920E4A77A6EEC92C32282692485CA70773E1EA454C656AD75F4AFB6`.

@@ -23,14 +23,14 @@ Date: 2026-08-21
 - The default suite confirmed that real input is ignored unless explicitly requested.
 - The explicit Windows probe typed `AutoQuill 日本🙂` into its own temporary external text box,
   verified the received text, changed foreground focus, and confirmed immediate target rejection.
-- GitHub Actions run `32451530818` passed Windows format/lint/tests and optimized release builds on
-  native Windows, macOS, and Ubuntu runners.
+- The pre-public GitHub Actions verification passed Windows format/lint/tests and optimized release
+  builds on native Windows, macOS, and Ubuntu runners.
 - The locked size-focused software-renderer build passed the hidden optimized smoke test in 1,606
   milliseconds.
 
 ## Windows artifact
 
-- Source commit: `0f070be96090980baedc3a82c4684e117410d1ae`.
+- Source commit: `7fb3716ff768beab17ac37e63c598a876a351ba5`.
 - Windows x64 executable: 9,677,824 bytes (about 9.23 MiB).
 - SHA-256: `38AF002424C1C42E298943C6773396FF988B13AAF7FCD217EF0E3942BD182C1B`.
 - Increase from the Phase 1 profile package: 101,376 bytes (about 0.10 MiB).

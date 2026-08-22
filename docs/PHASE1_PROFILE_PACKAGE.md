@@ -34,6 +34,6 @@ Results:
 - Preserved at `local-builds/AutoQuill-windows-x64.exe` (gitignored).
 - Cleanup removed 8,342 Cargo artifact files totaling 3.8 GiB.
 
-GitHub Actions run `32446741496` passed the native optimized Windows, macOS, and Ubuntu builds plus
-the Windows format/lint/test job. The verified Windows executable and checksum were then published
-to `dist`.
+The pre-public GitHub Actions verification passed the native optimized Windows, macOS, and Ubuntu
+builds plus the Windows format/lint/test job. The verified Windows executable and checksum were
+then published to `dist`.

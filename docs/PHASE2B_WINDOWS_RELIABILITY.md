@@ -53,9 +53,9 @@ The result is therefore recorded as a limitation rather than presented as a stab
 
 ## Release evidence
 
-- Source commit: `7b64e4735a8e1796eeb42ae035300ceb34d6c9ea`.
-- GitHub Actions run `32548656902` passed Windows format/lint/tests and optimized release builds on
-  native Windows, macOS, and Ubuntu runners.
+- Source commit: `4b67da33fdc78419fddadae6bbe08b1e3e945ccb`.
+- The pre-public GitHub Actions verification passed Windows format/lint/tests and optimized release
+  builds on native Windows, macOS, and Ubuntu runners.
 - Windows x64 executable: 9,678,336 bytes (about 9.23 MiB), an increase of 512 bytes from Phase 2A.
 - Locked hidden smoke test: 1,741 milliseconds.
 - SHA-256: `6ADC3B1E4B5CD4283D31B3073FA1CC555971DA87E4E0D285B8D002990AC3E207`.

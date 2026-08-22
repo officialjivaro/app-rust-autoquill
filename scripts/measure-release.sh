@@ -9,6 +9,13 @@ esac
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target_dir="$project_root/target/size-$renderer"
+privacy_remap_flag="--remap-path-prefix=${HOME}=<USERPROFILE>"
+
+if [[ -n "${RUSTFLAGS:-}" ]]; then
+  export RUSTFLAGS="${RUSTFLAGS} ${privacy_remap_flag}"
+else
+  export RUSTFLAGS="$privacy_remap_flag"
+fi
 
 cargo build \
   --manifest-path "$project_root/Cargo.toml" \

@@ -19,16 +19,31 @@ if (-not (Test-Path -LiteralPath $CargoPath)) {
 
 $TargetDir = Join-Path $ProjectRoot "target\size-$Renderer"
 $Feature = "renderer-$Renderer"
+$UserProfilePath = [Environment]::GetFolderPath("UserProfile")
+$PreviousRustFlags = $env:RUSTFLAGS
+$PrivacyRemapFlag = "--remap-path-prefix=$UserProfilePath=<USERPROFILE>"
 
-& $CargoPath build `
-    --manifest-path (Join-Path $ProjectRoot "Cargo.toml") `
-    --profile release-size `
-    --locked `
-    --no-default-features `
-    --features $Feature `
-    --target-dir $TargetDir
+if ([string]::IsNullOrWhiteSpace($PreviousRustFlags)) {
+    $env:RUSTFLAGS = $PrivacyRemapFlag
+} else {
+    $env:RUSTFLAGS = "$PreviousRustFlags $PrivacyRemapFlag"
+}
 
-if ($LASTEXITCODE -ne 0) {
+$BuildExitCode = 1
+try {
+    & $CargoPath build `
+        --manifest-path (Join-Path $ProjectRoot "Cargo.toml") `
+        --profile release-size `
+        --locked `
+        --no-default-features `
+        --features $Feature `
+        --target-dir $TargetDir
+    $BuildExitCode = $LASTEXITCODE
+} finally {
+    $env:RUSTFLAGS = $PreviousRustFlags
+}
+
+if ($BuildExitCode -ne 0) {
     throw "The $Renderer release build failed."
 }
 

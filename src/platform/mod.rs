@@ -63,7 +63,11 @@ impl ForegroundTarget {
 pub enum HotkeyEvent {
     Pressed,
     Registered(u8),
-    RegistrationFailed { key: u8, message: String },
+    RegistrationFailed {
+        key: u8,
+        retained_key: Option<u8>,
+        message: String,
+    },
 }
 
 #[cfg(windows)]

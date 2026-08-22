@@ -15,7 +15,7 @@ use autoquill::{
 use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, FindWindowW, GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
-    SetForegroundWindow,
+    PostMessageW, SetForegroundWindow, WM_CLOSE,
 };
 
 struct ProbeProcess {
@@ -153,7 +153,30 @@ $form.Add_Shown({ $form.Activate(); $textBox.Focus() })
             Err(NativeInputError::TargetChanged),
             "a foreground change must invalidate the captured target"
         );
+        assert_eq!(
+            backend.emit(
+                &target,
+                &PreviewOperation::Intended(Instruction::Character('X')),
+            ),
+            Err(NativeInputError::TargetChanged),
+            "no input may be emitted after focus leaves the captured target"
+        );
     }
+
+    unsafe { PostMessageW(window, WM_CLOSE, 0, 0) };
+    let close_deadline = Instant::now() + Duration::from_secs(5);
+    while unsafe { IsWindow(window) } != 0 {
+        assert!(
+            Instant::now() < close_deadline,
+            "probe window did not close"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(
+        backend.validate(&target),
+        Err(NativeInputError::TargetClosed),
+        "a closed target must invalidate the captured target"
+    );
 }
 
 fn foreground_probe_window(window: windows_sys::Win32::Foundation::HWND) {

@@ -1,7 +1,7 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Phase 2A Windows foreground-typing beta implemented; manual matrix and Sticky Auto remain
-Last updated: 2026-08-21
+Status: Phase 2B Windows foreground reliability verified; Sticky Auto remains a separate package
+Last updated: 2026-08-22
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
 This document is the day-to-day build sequence for AutoQuill. It consolidates the six remaining
@@ -345,7 +345,7 @@ explicit per-launch confirmation and a mandatory two-second countdown.
 
 ### 2.3 Sticky Auto targeting
 
-Status: Deferred until foreground typing completes the Windows manual application matrix.
+Status: Deferred to the next package after the foreground reliability matrix.
 
 - Capture focused child HWND and root window at Start.
 - Record title, class, process, and browser-like classification.
@@ -356,8 +356,9 @@ Status: Deferred until foreground typing completes the Windows manual applicatio
 
 ### 2.4 Global shortcuts and Windows product integration
 
-Status: Bare F1–F12 Start/Stop registration, conflict reporting, and unsigned portable packaging
-are implemented. Modifier shortcuts, tray integration, and signing remain deferred.
+Status: Bare F1–F12 Start/Stop registration, transactional conflict fallback, repeat/restart
+suppression, and unsigned portable packaging are implemented. Modifier shortcuts, tray integration,
+and signing remain deferred.
 
 - Register modifier shortcuts through native Win32 APIs first.
 - Preserve F1–F12 behavior.
@@ -367,6 +368,12 @@ are implemented. Modifier shortcuts, tray integration, and signing remain deferr
   and portable artifact naming.
 
 ### 2.5 Windows matrix
+
+Status: Foreground reliability package completed on 2026-08-22. Notepad, Edge, Chrome, controlled
+Unicode input, focus loss, target closure, F1–F12 registration inventory, repeat suppression,
+transactional rebind conflicts, and Stop latency passed. Firefox was not installed. VS Code's
+isolated clean-profile top-level safety passed, but its child-editor focus automation remains
+non-gating and documented in `PHASE2B_WINDOWS_RELIABILITY.md`.
 
 - Real-input tests are explicit/manual and never part of default `cargo test`.
 - Test Notepad, VS Code, Chrome, Edge, Firefox, and common form fields.
@@ -521,12 +528,13 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Add bare F1-F12 global Start/Stop with conflict handling`
 - [x] `Add Simulation/Real Typing mode, per-launch consent, and 2-second countdown`
 - [x] `Publish the verified Phase 2A Windows foreground beta to dist`
-- [ ] `Complete the Windows manual application/input matrix`
+- [x] `Complete the Windows foreground reliability/input matrix`
+- [ ] `Publish the verified Phase 2B Windows reliability beta to dist`
 - [ ] `Implement and verify Sticky Auto targeting`
 - [ ] `Complete the Phase 2 Windows gate and refresh dist`
 
-Real Windows injection began only after the Phase 1 gate passed. The manual matrix and Sticky Auto
-remain required before Phase 2 can be declared feature-complete.
+Real Windows injection began only after the Phase 1 gate passed. Sticky Auto remains required before
+Phase 2 can be declared feature-complete.
 
 ## 11. Plan maintenance
 

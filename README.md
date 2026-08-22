@@ -3,7 +3,8 @@
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
 The current source includes a branded, interactive editor, a safe simulation preview, and an
 explicitly armed Windows foreground-typing beta backed by the same portable compiler and session
-engine. Start, Pause/Resume, Stop, Reset, startup delay, active-time limits, loops, breaks, short
+engine. The Windows reliability matrix covers Notepad, Edge, Chrome, target loss, and global-key
+stress. Start, Pause/Resume, Stop, Reset, startup delay, active-time limits, loops, breaks, short
 pauses, and visible simulated corrections are functional. Profiles keep the draft and every
 setting together, including deliberate legacy import and recoverable upgrades.
 
@@ -28,7 +29,9 @@ Simulation is selected on every launch and never emits external keystrokes. On W
 and press the configured bare F1–F12 key to capture it; the same key stops the session. Real Typing
 always waits two seconds, validates the foreground window before every operation, and stops
 immediately if that window changes or closes. AutoQuill refuses to target itself and blocks a run
-when its activation F-key also appears in the document.
+when its activation F-key also appears in the document. Activation-key rebinding is transactional:
+if the new key is occupied, the old key stays available as an emergency Stop but cannot start a new
+run. Queued/repeated key events cannot restart a session immediately after Stop.
 
 Real Typing is not yet enabled on macOS or Linux. Sticky/background targeting is also deferred;
 this beta deliberately supports strict foreground typing only.
@@ -65,12 +68,17 @@ cargo test
 cargo run
 ```
 
-The controlled Windows native-input probe is excluded from normal tests. Run it only on an
-interactive desktop where a temporary test window may receive input:
+All Windows native-input probes are excluded from normal tests. Run them only on an interactive
+desktop where temporary documents, isolated browser profiles, and controlled F-keys may be used:
 
 ```text
 cargo test --test windows_native_input -- --ignored
+cargo test --test windows_hotkey_stress -- --ignored --nocapture --test-threads=1
+cargo test --test windows_compatibility_matrix -- --ignored --nocapture --test-threads=1
 ```
+
+See [docs/PHASE2B_WINDOWS_RELIABILITY.md](docs/PHASE2B_WINDOWS_RELIABILITY.md) for the exact matrix,
+known VS Code harness limitation, and release evidence.
 
 Development and test profiles disable debug-symbol and incremental caches to keep storage usage
 manageable. After preserving a verified release executable, remove Cargo artifacts with:

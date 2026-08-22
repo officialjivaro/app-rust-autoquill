@@ -33,6 +33,47 @@ slint::include_modules!();
 
 const UI_TICK: Duration = Duration::from_millis(16);
 const HOTKEY_POLL: Duration = Duration::from_millis(25);
+const HOTKEY_RESTART_SUPPRESSION: Duration = Duration::from_millis(300);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActivationAction {
+    Start,
+    Stop,
+    Ignore,
+}
+
+#[derive(Debug, Default)]
+struct ActivationGate {
+    suppress_starts_until: Option<Instant>,
+}
+
+impl ActivationGate {
+    fn decide(
+        &mut self,
+        now: Instant,
+        session_active: bool,
+        start_permitted: bool,
+    ) -> ActivationAction {
+        if session_active {
+            self.suppress_starts_until = Some(now + HOTKEY_RESTART_SUPPRESSION);
+            return ActivationAction::Stop;
+        }
+
+        if self
+            .suppress_starts_until
+            .is_some_and(|deadline| now < deadline)
+        {
+            return ActivationAction::Ignore;
+        }
+        self.suppress_starts_until = None;
+
+        if start_permitted {
+            ActivationAction::Start
+        } else {
+            ActivationAction::Ignore
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 struct NativeRunState {
@@ -449,6 +490,7 @@ fn connect_hotkey(app: &AppWindow) {
             let service = Rc::new(service);
             let receiver = Rc::new(RefCell::new(receiver));
             let hotkey_timer = Rc::new(slint::Timer::default());
+            let activation_gate = Rc::new(RefCell::new(ActivationGate::default()));
 
             let weak_app = app.as_weak();
             let key_service = Rc::clone(&service);
@@ -468,6 +510,7 @@ fn connect_hotkey(app: &AppWindow) {
 
             let weak_app = app.as_weak();
             let event_receiver = Rc::clone(&receiver);
+            let event_gate = Rc::clone(&activation_gate);
             let keep_service_alive = Rc::clone(&service);
             let weak_timer = Rc::downgrade(&hotkey_timer);
             hotkey_timer.start(slint::TimerMode::Repeated, HOTKEY_POLL, move || {
@@ -481,23 +524,34 @@ fn connect_hotkey(app: &AppWindow) {
                 while let Ok(event) = event_receiver.borrow().try_recv() {
                     match event {
                         HotkeyEvent::Pressed => {
-                            if app.get_session_active() {
-                                app.invoke_stop_simulation();
-                            } else if app.get_can_start()
+                            let start_permitted = app.get_hotkey_ready()
+                                && app.get_can_start()
                                 && (!app.get_real_typing_selected()
-                                    || app.get_real_typing_confirmed())
-                            {
-                                app.invoke_start_simulation();
+                                    || app.get_real_typing_confirmed());
+                            match event_gate.borrow_mut().decide(
+                                Instant::now(),
+                                app.get_session_active(),
+                                start_permitted,
+                            ) {
+                                ActivationAction::Start => app.invoke_start_simulation(),
+                                ActivationAction::Stop => app.invoke_stop_simulation(),
+                                ActivationAction::Ignore => {}
                             }
                         }
                         HotkeyEvent::Registered(key) => {
-                            app.set_hotkey_ready(true);
-                            app.set_hotkey_status(format!("F{key} READY • START / STOP").into());
+                            if i32::from(key) == app.get_shortcut_number() {
+                                app.set_hotkey_ready(true);
+                                app.set_hotkey_status(
+                                    format!("F{key} READY • START / STOP").into(),
+                                );
+                            }
                         }
-                        HotkeyEvent::RegistrationFailed { key: _, message } => {
-                            app.set_hotkey_ready(false);
-                            app.set_hotkey_status("ACTIVATION KEY UNAVAILABLE".into());
-                            show_error(&app, &message);
+                        HotkeyEvent::RegistrationFailed { key, message, .. } => {
+                            if i32::from(key) == app.get_shortcut_number() {
+                                app.set_hotkey_ready(false);
+                                app.set_hotkey_status("ACTIVATION KEY UNAVAILABLE".into());
+                                show_error(&app, &message);
+                            }
                         }
                     }
                 }
@@ -1532,5 +1586,39 @@ mod tests {
         let (updated, caret) = insert_at_selection("Hello", "{TIME}", -1, -1);
         assert_eq!(updated, "Hello{TIME}");
         assert_eq!(caret, 11);
+    }
+
+    #[test]
+    fn queued_hotkey_press_cannot_restart_a_just_stopped_session() {
+        let now = Instant::now();
+        let mut gate = ActivationGate::default();
+
+        assert_eq!(gate.decide(now, true, true), ActivationAction::Stop);
+        assert_eq!(
+            gate.decide(now + Duration::from_millis(25), false, true),
+            ActivationAction::Ignore
+        );
+        assert_eq!(
+            gate.decide(now + HOTKEY_RESTART_SUPPRESSION, false, true),
+            ActivationAction::Start
+        );
+    }
+
+    #[test]
+    fn active_session_can_always_be_stopped_by_retained_hotkey() {
+        let mut gate = ActivationGate::default();
+        assert_eq!(
+            gate.decide(Instant::now(), true, false),
+            ActivationAction::Stop
+        );
+    }
+
+    #[test]
+    fn unavailable_hotkey_cannot_start_an_idle_session() {
+        let mut gate = ActivationGate::default();
+        assert_eq!(
+            gate.decide(Instant::now(), false, false),
+            ActivationAction::Ignore
+        );
     }
 }

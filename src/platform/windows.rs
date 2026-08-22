@@ -29,7 +29,8 @@ use crate::typing::{Instruction, PreviewOperation, SpecialKey};
 
 use super::{ForegroundTarget, HotkeyEvent, NativeInputError};
 
-const HOTKEY_ID: i32 = 1;
+const HOTKEY_ID_PRIMARY: i32 = 1;
+const HOTKEY_ID_SECONDARY: i32 = 2;
 const COMMAND_MESSAGE: u32 = WM_APP + 17;
 
 #[derive(Debug, Default)]
@@ -306,29 +307,44 @@ fn hotkey_thread(
     let thread_id = unsafe { GetCurrentThreadId() };
     let _ = ready_sender.send(thread_id);
 
-    let mut registered = false;
-    register_key(initial_key, &event_sender, &mut registered);
+    let mut active_registration =
+        try_register_key(HOTKEY_ID_PRIMARY, initial_key, &event_sender, None)
+            .then_some((HOTKEY_ID_PRIMARY, initial_key));
 
     loop {
         let result = unsafe { GetMessageW(&mut message, ptr::null_mut(), 0, 0) };
         if result <= 0 {
             break;
         }
-        if message.message == WM_HOTKEY && message.wParam == HOTKEY_ID as WPARAM {
+        if message.message == WM_HOTKEY
+            && active_registration.is_some_and(|(id, _)| message.wParam == id as WPARAM)
+        {
             let _ = event_sender.send(HotkeyEvent::Pressed);
         } else if message.message == COMMAND_MESSAGE {
             while let Ok(command) = command_receiver.try_recv() {
                 match command {
                     HotkeyCommand::Set(function_key) => {
-                        if registered {
-                            unsafe { UnregisterHotKey(ptr::null_mut(), HOTKEY_ID) };
-                            registered = false;
+                        if active_registration.is_some_and(|(_, key)| key == function_key) {
+                            let _ = event_sender.send(HotkeyEvent::Registered(function_key));
+                            continue;
                         }
-                        register_key(function_key, &event_sender, &mut registered);
+
+                        let candidate_id = match active_registration {
+                            Some((HOTKEY_ID_PRIMARY, _)) => HOTKEY_ID_SECONDARY,
+                            _ => HOTKEY_ID_PRIMARY,
+                        };
+                        let retained_key = active_registration.map(|(_, key)| key);
+                        if try_register_key(candidate_id, function_key, &event_sender, retained_key)
+                        {
+                            if let Some((old_id, _)) = active_registration {
+                                unsafe { UnregisterHotKey(ptr::null_mut(), old_id) };
+                            }
+                            active_registration = Some((candidate_id, function_key));
+                        }
                     }
                     HotkeyCommand::Shutdown => {
-                        if registered {
-                            unsafe { UnregisterHotKey(ptr::null_mut(), HOTKEY_ID) };
+                        if let Some((id, _)) = active_registration {
+                            unsafe { UnregisterHotKey(ptr::null_mut(), id) };
                         }
                         return;
                     }
@@ -337,24 +353,34 @@ fn hotkey_thread(
         }
     }
 
-    if registered {
-        unsafe { UnregisterHotKey(ptr::null_mut(), HOTKEY_ID) };
+    if let Some((id, _)) = active_registration {
+        unsafe { UnregisterHotKey(ptr::null_mut(), id) };
     }
 }
 
-fn register_key(function_key: u8, event_sender: &Sender<HotkeyEvent>, registered: &mut bool) {
+fn try_register_key(
+    id: i32,
+    function_key: u8,
+    event_sender: &Sender<HotkeyEvent>,
+    retained_key: Option<u8>,
+) -> bool {
     let virtual_key = u32::from(VK_F1) + u32::from(function_key - 1);
-    if unsafe { RegisterHotKey(ptr::null_mut(), HOTKEY_ID, MOD_NOREPEAT, virtual_key) } != 0 {
-        *registered = true;
+    if unsafe { RegisterHotKey(ptr::null_mut(), id, MOD_NOREPEAT, virtual_key) } != 0 {
         let _ = event_sender.send(HotkeyEvent::Registered(function_key));
+        true
     } else {
         let error = io::Error::last_os_error();
+        let retained = retained_key.map_or_else(String::new, |key| {
+            format!(" F{key} remains registered until another key is available.")
+        });
         let _ = event_sender.send(HotkeyEvent::RegistrationFailed {
             key: function_key,
+            retained_key,
             message: format!(
-                "F{function_key} is already in use or unavailable ({error}). Choose another F-key."
+                "F{function_key} is already in use or unavailable ({error}).{retained} Choose another F-key."
             ),
         });
+        false
     }
 }
 

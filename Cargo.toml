@@ -1,6 +1,6 @@
 [package]
 name = "autoquill"
-version = "0.14.0-alpha.1"
+version = "0.14.0-beta.1"
 edition = "2024"
 rust-version = "1.97"
 description = "A compact, cross-platform automatic typing assistant"

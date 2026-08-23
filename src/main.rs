@@ -19,8 +19,8 @@ use autoquill::{
         WindowPreferences,
     },
     platform::{
-        ForegroundBackend, ForegroundTarget, HotkeyEvent, HotkeyService,
-        document_uses_activation_key,
+        DeliveryStrategy, ForegroundBackend, ForegroundTarget, HotkeyEvent, HotkeyService,
+        document_uses_activation_shortcut,
     },
     typing::{
         CompileWarning, CompletionReason, EngineUpdate, PreviewOperation, SeededRandom,
@@ -30,7 +30,7 @@ use autoquill::{
 };
 use slint::{
     CloseRequestResponse, ComponentHandle, LogicalSize, ModelRc, PhysicalPosition, PhysicalSize,
-    VecModel,
+    VecModel, platform::Key,
 };
 
 slint::include_modules!();
@@ -245,6 +245,7 @@ fn connect_interactions(app: &AppWindow) {
     app.set_real_typing_selected(false);
     app.set_real_typing_confirmed(false);
     app.set_target_name("No target captured".into());
+    app.set_target_delivery("NOT CAPTURED".into());
 
     let weak_app = app.as_weak();
     app.on_choose_simulation(move || {
@@ -279,8 +280,8 @@ fn connect_interactions(app: &AppWindow) {
             app.set_notice_is_error(false);
             app.set_notice_text(
                 format!(
-                    "Real Typing is armed. Focus the destination app and press F{} to start; press it again to stop.",
-                    app.get_shortcut_number()
+                    "Real Typing is armed. Focus the destination app and press {} to start; press it again or Escape to stop.",
+                    app.get_shortcut_text()
                 )
                 .into(),
             );
@@ -301,8 +302,8 @@ fn connect_interactions(app: &AppWindow) {
             app.set_notice_is_error(false);
             app.set_notice_text(
                 format!(
-                    "Focus the exact destination window, then press F{}. AutoQuill will capture it and begin after a 2-second countdown.",
-                    app.get_shortcut_number()
+                    "Focus the exact destination window, then press {}. AutoQuill will capture it and begin after a 2-second countdown.",
+                    app.get_shortcut_text()
                 )
                 .into(),
             );
@@ -319,8 +320,8 @@ fn connect_interactions(app: &AppWindow) {
                 app.set_notice_text(
                     if app.get_real_typing_selected() {
                         format!(
-                            "Draft updated. Focus the destination app and press F{} when ready.",
-                            app.get_shortcut_number()
+                            "Draft updated. Focus the destination app and press {} when ready.",
+                            app.get_shortcut_text()
                         )
                     } else {
                         "Simulation mode is safe: no keystrokes leave this window.".into()
@@ -371,7 +372,9 @@ fn connect_interactions(app: &AppWindow) {
         };
         let warning_notice = summarize_warnings(&compilation.warnings);
         let real_typing = app.get_real_typing_selected();
-        let function_key = u8::try_from(app.get_shortcut_number()).unwrap_or(1);
+        let mut settings = settings_from_ui(&app);
+        let shortcut = settings.shortcut;
+        let mut target_notice = None;
 
         if real_typing {
             if !app.get_real_typing_confirmed() {
@@ -381,21 +384,25 @@ fn connect_interactions(app: &AppWindow) {
             if !app.get_hotkey_ready() {
                 show_error(
                     &app,
-                    "The selected activation key is unavailable. Choose another F-key in Advanced Settings.",
+                    "The selected activation shortcut is unavailable. Record another shortcut in Advanced Settings.",
                 );
                 return;
             }
-            if document_uses_activation_key(&compilation.instructions, function_key) {
+            if document_uses_activation_shortcut(&compilation.instructions, shortcut) {
                 show_error(
                     &app,
                     &format!(
-                        "This document contains [F{function_key}], which is reserved as the Start/Stop key. Remove that token or choose another activation key."
+                        "This document contains [{shortcut}], which is reserved as the Start/Stop shortcut. Remove that token or choose another activation shortcut."
                     ),
                 );
                 return;
             }
 
-            let target = match start_native.borrow().backend.capture_foreground() {
+            let target = match start_native
+                .borrow()
+                .backend
+                .capture(settings.target, &compilation.instructions)
+            {
                 Ok(target) => target,
                 Err(error) => {
                     show_error(&app, &error.to_string());
@@ -403,13 +410,28 @@ fn connect_interactions(app: &AppWindow) {
                 }
             };
             app.set_target_name(target.label().into());
+            app.set_target_delivery(target.delivery_label().into());
+            target_notice = Some(match target.delivery() {
+                DeliveryStrategy::NativeBackground => format!(
+                    "Sticky Background is active for {}. You may change foreground apps; {} or Escape stops immediately.",
+                    target.label(), shortcut
+                ),
+                DeliveryStrategy::ForegroundProtected if settings.target == TargetIntent::StickyAuto => format!(
+                    "Sticky Auto selected Foreground Protected for {} because this target or document is not background-safe. Keep it foreground; {} or Escape stops immediately.",
+                    target.label(), shortcut
+                ),
+                DeliveryStrategy::ForegroundProtected => format!(
+                    "Foreground Protected: {}. Keep it foreground; {} or Escape stops immediately.",
+                    target.label(), shortcut
+                ),
+            });
             start_native.borrow_mut().target = Some(target);
         } else {
             start_native.borrow_mut().target = None;
             app.set_target_name("No target captured".into());
+            app.set_target_delivery("NOT CAPTURED".into());
         }
 
-        let mut settings = settings_from_ui(&app);
         if real_typing {
             settings.startup_delay_enabled = true;
             settings.startup_delay_seconds = 2;
@@ -431,18 +453,14 @@ fn connect_interactions(app: &AppWindow) {
         apply_engine_update(&app, &update);
         app.set_notice_is_error(false);
         app.set_notice_text(
-            warning_notice
-                .unwrap_or_else(|| {
-                    if real_typing {
-                        format!(
-                            "Target locked: {}. Keep it foreground; F{} stops immediately.",
-                            app.get_target_name(),
-                            app.get_shortcut_number()
-                        )
-                    } else {
-                        "Safe simulation is running. No native input is being sent.".into()
-                    }
-                })
+            match (target_notice, warning_notice) {
+                (Some(target), Some(warning)) => format!("{target} {warning}"),
+                (Some(target), None) => target,
+                (None, Some(warning)) => warning,
+                (None, None) => {
+                    "Safe simulation is running. No native input is being sent.".into()
+                }
+            }
                 .into(),
         );
 
@@ -479,6 +497,7 @@ fn connect_interactions(app: &AppWindow) {
                     let update = tick_engine.borrow_mut().fail(error.to_string());
                     tick_native.borrow_mut().target = None;
                     app.set_target_name("Target lost".into());
+                    app.set_target_delivery("STOPPED".into());
                     apply_engine_update(&app, &update);
                     show_error(&app, &error.to_string());
                     if let Some(timer) = weak_timer.upgrade() {
@@ -511,6 +530,7 @@ fn connect_interactions(app: &AppWindow) {
                     let failed = tick_engine.borrow_mut().fail(error.to_string());
                     tick_native.borrow_mut().target = None;
                     app.set_target_name("Input stopped".into());
+                    app.set_target_delivery("STOPPED".into());
                     apply_engine_update(&app, &failed);
                     show_error(&app, &error.to_string());
                     if let Some(timer) = weak_timer.upgrade() {
@@ -523,6 +543,7 @@ fn connect_interactions(app: &AppWindow) {
             apply_engine_update(&app, &update);
             if !update.snapshot.state.is_active() {
                 tick_native.borrow_mut().target = None;
+                app.set_target_delivery("COMPLETE".into());
                 apply_completion_notice(&app, update.snapshot.completion_reason);
                 if let Some(timer) = weak_timer.upgrade() {
                     timer.stop();
@@ -555,7 +576,7 @@ fn connect_interactions(app: &AppWindow) {
             app.set_notice_is_error(false);
             app.set_notice_text(
                 if app.get_real_typing_selected() {
-                    "Real Typing resumed. The captured target must remain foreground."
+                    "Real Typing resumed with the captured target and selected safety strategy."
                 } else {
                     "Safe simulation resumed."
                 }
@@ -575,6 +596,7 @@ fn connect_interactions(app: &AppWindow) {
             let was_real_typing = app.get_real_typing_selected();
             let update = stop_engine.borrow_mut().stop();
             apply_engine_update(&app, &update);
+            app.set_target_delivery("STOPPED".into());
             app.set_notice_is_error(false);
             app.set_notice_text(
                 if was_real_typing {
@@ -598,6 +620,8 @@ fn connect_interactions(app: &AppWindow) {
             let update = reset_engine.borrow_mut().reset();
             app.set_preview_text("".into());
             apply_engine_update(&app, &update);
+            app.set_target_name("No target captured".into());
+            app.set_target_delivery("NOT CAPTURED".into());
             app.set_notice_is_error(false);
             app.set_notice_text(
                 "Preview reset. Your draft and advanced settings were kept.".into(),
@@ -609,25 +633,59 @@ fn connect_interactions(app: &AppWindow) {
 }
 
 fn connect_hotkey(app: &AppWindow) {
-    match HotkeyService::start(u8::try_from(app.get_shortcut_number()).unwrap_or(1)) {
+    match HotkeyService::start(shortcut_from_ui(app)) {
         Ok((service, receiver)) => {
             let service = Rc::new(service);
             let receiver = Rc::new(RefCell::new(receiver));
             let hotkey_timer = Rc::new(slint::Timer::default());
             let activation_gate = Rc::new(RefCell::new(ActivationGate::default()));
+            let escape_active = Rc::new(RefCell::new(false));
 
             let weak_app = app.as_weak();
             let key_service = Rc::clone(&service);
             let key_timer = Rc::clone(&hotkey_timer);
-            app.on_shortcut_changed(move |number| {
+            app.on_shortcut_changed(move |text| {
                 let _timer = &key_timer;
                 if let Some(app) = weak_app.upgrade() {
-                    let key = u8::try_from(number).unwrap_or(1);
+                    let Ok(shortcut) = text.as_str().parse::<Shortcut>() else {
+                        app.set_hotkey_ready(false);
+                        app.set_hotkey_status("INVALID SHORTCUT".into());
+                        show_error(&app, "Record a supported activation shortcut.");
+                        return;
+                    };
                     app.set_hotkey_ready(false);
-                    app.set_hotkey_status(format!("REGISTERING F{key}").into());
-                    if let Err(error) = key_service.set_key(key) {
-                        app.set_hotkey_status("ACTIVATION KEY ERROR".into());
+                    app.set_hotkey_status(format!("REGISTERING {shortcut}").into());
+                    if let Err(error) = key_service.set_shortcut(shortcut) {
+                        app.set_hotkey_status("SHORTCUT ERROR".into());
                         show_error(&app, &error.to_string());
+                    }
+                }
+            });
+
+            let weak_app = app.as_weak();
+            app.on_shortcut_recorded(move |text, control, alt, shift, meta| {
+                let Some(app) = weak_app.upgrade() else {
+                    return;
+                };
+                match shortcut_from_key_event(text.as_str(), control, alt, shift, meta) {
+                    Ok(Some(shortcut)) => {
+                        app.set_shortcut_recording(false);
+                        app.set_shortcut_text(shortcut.to_string().into());
+                        show_notice(
+                            &app,
+                            &format!("Activation shortcut recorded: {shortcut}."),
+                        );
+                    }
+                    Ok(None) => {
+                        app.set_notice_is_error(false);
+                        app.set_notice_text(
+                            "Keep holding the modifier, then press F1–F12, Space, or a printable key."
+                                .into(),
+                        );
+                    }
+                    Err(message) => {
+                        app.set_notice_is_error(true);
+                        app.set_notice_text(message.into());
                     }
                 }
             });
@@ -636,15 +694,27 @@ fn connect_hotkey(app: &AppWindow) {
             let event_receiver = Rc::clone(&receiver);
             let event_gate = Rc::clone(&activation_gate);
             let keep_service_alive = Rc::clone(&service);
+            let event_escape_active = Rc::clone(&escape_active);
             let weak_timer = Rc::downgrade(&hotkey_timer);
             hotkey_timer.start(slint::TimerMode::Repeated, HOTKEY_POLL, move || {
-                let _service = &keep_service_alive;
                 let Some(app) = weak_app.upgrade() else {
                     if let Some(timer) = weak_timer.upgrade() {
                         timer.stop();
                     }
                     return;
                 };
+
+                let should_capture_escape =
+                    app.get_session_active() && app.get_real_typing_selected();
+                if should_capture_escape != *event_escape_active.borrow() {
+                    if let Err(error) = keep_service_alive.set_escape_active(should_capture_escape)
+                    {
+                        app.set_notice_is_error(true);
+                        app.set_notice_text(error.to_string().into());
+                    }
+                    *event_escape_active.borrow_mut() = should_capture_escape;
+                }
+
                 while let Ok(event) = event_receiver.borrow().try_recv() {
                     match event {
                         HotkeyEvent::Pressed => {
@@ -662,20 +732,31 @@ fn connect_hotkey(app: &AppWindow) {
                                 ActivationAction::Ignore => {}
                             }
                         }
-                        HotkeyEvent::Registered(key) => {
-                            if i32::from(key) == app.get_shortcut_number() {
+                        HotkeyEvent::EmergencyStop => {
+                            if app.get_session_active() {
+                                app.invoke_stop_simulation();
+                            }
+                        }
+                        HotkeyEvent::Registered(shortcut) => {
+                            if shortcut == shortcut_from_ui(&app) {
                                 app.set_hotkey_ready(true);
                                 app.set_hotkey_status(
-                                    format!("F{key} READY • START / STOP").into(),
+                                    format!("{shortcut} READY • START / STOP").into(),
                                 );
                             }
                         }
-                        HotkeyEvent::RegistrationFailed { key, message, .. } => {
-                            if i32::from(key) == app.get_shortcut_number() {
+                        HotkeyEvent::RegistrationFailed {
+                            shortcut, message, ..
+                        } => {
+                            if shortcut == shortcut_from_ui(&app) {
                                 app.set_hotkey_ready(false);
-                                app.set_hotkey_status("ACTIVATION KEY UNAVAILABLE".into());
+                                app.set_hotkey_status("SHORTCUT UNAVAILABLE".into());
                                 show_error(&app, &message);
                             }
+                        }
+                        HotkeyEvent::EscapeRegistrationFailed(message) => {
+                            app.set_notice_is_error(true);
+                            app.set_notice_text(message.into());
                         }
                     }
                 }
@@ -688,8 +769,91 @@ fn connect_hotkey(app: &AppWindow) {
                 show_error(app, &error.to_string());
             }
             app.on_shortcut_changed(|_| {});
+            app.on_shortcut_recorded(|_, _, _, _, _| {});
         }
     }
+}
+
+fn shortcut_from_ui(app: &AppWindow) -> Shortcut {
+    app.get_shortcut_text().as_str().parse().unwrap_or_default()
+}
+
+fn shortcut_from_key_event(
+    text: &str,
+    control: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+) -> Result<Option<Shortcut>, String> {
+    let Some(character) = text.chars().next() else {
+        return Ok(None);
+    };
+    if text.chars().count() != 1 {
+        return Err("That key is not supported. Use F1–F12, Space, or one printable key.".into());
+    }
+
+    let modifier_keys = [
+        Key::Control,
+        Key::ControlR,
+        Key::Alt,
+        Key::AltGr,
+        Key::Shift,
+        Key::ShiftR,
+        Key::Meta,
+        Key::MetaR,
+    ];
+    if modifier_keys
+        .into_iter()
+        .any(|key| character == char::from(key))
+    {
+        return Ok(None);
+    }
+
+    let key = [
+        Key::F1,
+        Key::F2,
+        Key::F3,
+        Key::F4,
+        Key::F5,
+        Key::F6,
+        Key::F7,
+        Key::F8,
+        Key::F9,
+        Key::F10,
+        Key::F11,
+        Key::F12,
+    ]
+    .into_iter()
+    .position(|key| character == char::from(key))
+    .map_or_else(
+        || {
+            if character == char::from(Key::Space) {
+                Ok(ShortcutKey::Space)
+            } else if character.is_ascii_graphic() {
+                Ok(ShortcutKey::Character(character))
+            } else {
+                Err("That key is not supported. Use F1–F12, Space, or one printable key.")
+            }
+        },
+        |index| Ok(ShortcutKey::Function((index + 1) as u8)),
+    )?;
+
+    let modifiers = ModifierSet {
+        control,
+        alt,
+        shift,
+        meta,
+    };
+    if matches!(key, ShortcutKey::Character(_) | ShortcutKey::Space) && modifiers.is_empty() {
+        return Err(
+            "Letters, symbols, and Space need Ctrl, Alt, Shift, or Win so normal typing remains usable. Keep recording and try a modifier combination."
+                .into(),
+        );
+    }
+
+    Shortcut::new(modifiers, key)
+        .map(Some)
+        .map_err(|error| format!("That shortcut is not supported: {error}."))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1385,11 +1549,7 @@ fn apply_loaded_profile(
 }
 
 fn apply_settings_to_ui(app: &AppWindow, settings: &TypingSettings) {
-    let shortcut_number = match settings.shortcut.key {
-        ShortcutKey::Function(number) => i32::from(number),
-        _ => 1,
-    };
-    app.set_shortcut_number(shortcut_number);
+    app.set_shortcut_text(settings.shortcut.to_string().into());
     app.set_sticky_typing(settings.target == TargetIntent::StickyAuto);
     app.set_wpm(i32::from(settings.wpm.get()));
     app.set_startup_delay_enabled(settings.startup_delay_enabled);
@@ -1518,11 +1678,7 @@ fn show_notice(app: &AppWindow, message: &str) {
 
 fn settings_from_ui(app: &AppWindow) -> autoquill::domain::TypingSettings {
     SettingsDraft {
-        shortcut: Shortcut::new(
-            ModifierSet::default(),
-            ShortcutKey::Function(u8::try_from(app.get_shortcut_number()).unwrap_or(1)),
-        )
-        .unwrap_or_default(),
+        shortcut: shortcut_from_ui(app),
         wpm: Some(i64::from(app.get_wpm())),
         sticky_typing: app.get_sticky_typing(),
         startup_delay_enabled: app.get_startup_delay_enabled(),
@@ -1754,5 +1910,40 @@ mod tests {
             gate.decide(Instant::now(), false, false),
             ActivationAction::Ignore
         );
+    }
+
+    #[test]
+    fn shortcut_recorder_accepts_function_and_modified_character_keys() {
+        let f12 = shortcut_from_key_event(
+            &char::from(Key::F12).to_string(),
+            false,
+            false,
+            false,
+            false,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(f12.to_string(), "F12");
+
+        let modified = shortcut_from_key_event("q", true, false, true, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(modified.to_string(), "Ctrl+Shift+Q");
+    }
+
+    #[test]
+    fn shortcut_recorder_waits_for_non_modifier_and_rejects_bare_characters() {
+        assert_eq!(
+            shortcut_from_key_event(
+                &char::from(Key::Control).to_string(),
+                true,
+                false,
+                false,
+                false,
+            )
+            .unwrap(),
+            None
+        );
+        assert!(shortcut_from_key_event("Q", false, false, false, false).is_err());
     }
 }

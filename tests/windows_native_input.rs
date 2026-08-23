@@ -9,8 +9,9 @@ use std::{
 };
 
 use autoquill::{
-    platform::{ForegroundBackend, NativeInputError},
-    typing::{Instruction, PreviewOperation},
+    domain::TargetIntent,
+    platform::{DeliveryStrategy, ForegroundBackend, NativeInputError},
+    typing::{Instruction, PreviewOperation, SpecialKey},
 };
 use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -111,6 +112,27 @@ $form.Add_Shown({ $form.Activate(); $textBox.Focus() })
         .capture_foreground()
         .expect("probe should be a valid external foreground target");
     assert!(target.label().contains("AutoQuill Native Input Probe"));
+    assert_eq!(target.delivery(), DeliveryStrategy::ForegroundProtected);
+
+    let background_instructions = " background"
+        .chars()
+        .map(Instruction::Character)
+        .collect::<Vec<_>>();
+    let sticky_target = backend
+        .capture(TargetIntent::StickyAuto, &background_instructions)
+        .expect("a native WinForms text box should support Sticky Background");
+    assert_eq!(sticky_target.delivery(), DeliveryStrategy::NativeBackground);
+
+    let unsafe_sticky_target = backend
+        .capture(
+            TargetIntent::StickyAuto,
+            &[Instruction::SpecialKey(SpecialKey::Tab)],
+        )
+        .expect("an unsafe Sticky Auto document should retain protected foreground capture");
+    assert_eq!(
+        unsafe_sticky_target.delivery(),
+        DeliveryStrategy::ForegroundProtected
+    );
 
     let expected = "AutoQuill 日本🙂";
     for character in expected.chars() {
@@ -161,6 +183,30 @@ $form.Add_Shown({ $form.Activate(); $textBox.Focus() })
             Err(NativeInputError::TargetChanged),
             "no input may be emitted after focus leaves the captured target"
         );
+
+        backend
+            .validate(&sticky_target)
+            .expect("a verified native Sticky Background target should survive foreground change");
+        for character in " background".chars() {
+            backend
+                .emit(
+                    &sticky_target,
+                    &PreviewOperation::Intended(Instruction::Character(character)),
+                )
+                .expect("verified background input should reach the captured native control");
+        }
+        let background_expected = format!("{expected} background");
+        let background_deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if fs::read_to_string(&output).is_ok_and(|actual| actual == background_expected) {
+                break;
+            }
+            assert!(
+                Instant::now() < background_deadline,
+                "probe did not receive Sticky Background Unicode text"
+            );
+            thread::sleep(Duration::from_millis(50));
+        }
     }
 
     unsafe { PostMessageW(window, WM_CLOSE, 0, 0) };
@@ -176,6 +222,11 @@ $form.Add_Shown({ $form.Activate(); $textBox.Focus() })
         backend.validate(&target),
         Err(NativeInputError::TargetClosed),
         "a closed target must invalidate the captured target"
+    );
+    assert_eq!(
+        backend.validate(&sticky_target),
+        Err(NativeInputError::TargetClosed),
+        "a closed Sticky Background target must be invalidated"
     );
 }
 

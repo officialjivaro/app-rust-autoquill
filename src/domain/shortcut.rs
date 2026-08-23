@@ -103,11 +103,12 @@ impl fmt::Display for Shortcut {
             formatter.write_str("Shift+")?;
         }
         if self.modifiers.meta {
-            formatter.write_str("Meta+")?;
+            formatter.write_str("Win+")?;
         }
 
         match self.key {
             ShortcutKey::Function(number) => write!(formatter, "F{number}"),
+            ShortcutKey::Character('+') => formatter.write_str("Plus"),
             ShortcutKey::Character(character) => write!(formatter, "{character}"),
             ShortcutKey::Space => formatter.write_str("Space"),
         }
@@ -131,7 +132,14 @@ impl FromStr for Shortcut {
                 "shift" => modifiers.shift = true,
                 "meta" | "cmd" | "win" => modifiers.meta = true,
                 "space" => key = Some(ShortcutKey::Space),
-                other if other.starts_with('f') => {
+                "plus" => key = Some(ShortcutKey::Character('+')),
+                other
+                    if other.len() > 1
+                        && other.starts_with('f')
+                        && other[1..]
+                            .chars()
+                            .all(|character| character.is_ascii_digit()) =>
+                {
                     let number = other[1..]
                         .parse::<u8>()
                         .map_err(|_| ShortcutError::FunctionKeyOutOfRange)?;
@@ -179,6 +187,17 @@ mod tests {
         .expect("Ctrl+Shift+Space should be supported");
 
         assert_eq!(shortcut.to_string(), "Ctrl+Shift+Space");
+
+        let windows_shortcut = Shortcut::new(
+            ModifierSet {
+                meta: true,
+                ..ModifierSet::default()
+            },
+            ShortcutKey::Function(8),
+        )
+        .unwrap();
+        assert_eq!(windows_shortcut.to_string(), "Win+F8");
+        assert_eq!("Win+F8".parse::<Shortcut>().unwrap(), windows_shortcut);
     }
 
     #[test]
@@ -193,5 +212,29 @@ mod tests {
         let shortcut: Shortcut = "Ctrl+Alt+F8".parse().unwrap();
         assert_eq!(shortcut.to_string(), "Ctrl+Alt+F8");
         assert!("F13".parse::<Shortcut>().is_err());
+    }
+
+    #[test]
+    fn plus_and_letter_f_shortcuts_round_trip_without_ambiguity() {
+        let plus = Shortcut::new(
+            ModifierSet {
+                control: true,
+                ..ModifierSet::default()
+            },
+            ShortcutKey::Character('+'),
+        )
+        .unwrap();
+        assert_eq!(plus.to_string(), "Ctrl+Plus");
+        assert_eq!("Ctrl+Plus".parse::<Shortcut>().unwrap(), plus);
+
+        let letter_f = Shortcut::new(
+            ModifierSet {
+                alt: true,
+                ..ModifierSet::default()
+            },
+            ShortcutKey::Character('F'),
+        )
+        .unwrap();
+        assert_eq!("Alt+F".parse::<Shortcut>().unwrap(), letter_f);
     }
 }

@@ -245,7 +245,16 @@ fn run_editor_probe(
         .into_owned();
     arguments.push(document.as_os_str().to_owned());
 
-    let app = launch_and_focus(name, executable, &arguments, &marker);
+    let app = match launch_and_focus(name, executable, &arguments, &marker) {
+        Ok(app) => app,
+        Err(message) if !release_gating => {
+            println!(
+                "MATRIX LIMITATION: {name} clean-profile launch/focus automation was unavailable: {message}. This optional editor is non-gating."
+            );
+            return;
+        }
+        Err(message) => panic!("{name} launch/focus probe failed: {message}"),
+    };
     let backend = ForegroundBackend;
     let target = backend
         .capture_foreground()
@@ -310,7 +319,8 @@ fn run_browser_probe(
         ]
     };
 
-    let app = launch_and_focus(name, executable, &arguments, marker);
+    let app = launch_and_focus(name, executable, &arguments, marker)
+        .unwrap_or_else(|message| panic!("{name} launch/focus probe failed: {message}"));
     let backend = ForegroundBackend;
     let target = backend
         .capture_foreground()
@@ -336,24 +346,26 @@ fn launch_and_focus(
     executable: &Path,
     arguments: &[OsString],
     marker: &str,
-) -> AppWindowGuard {
+) -> Result<AppWindowGuard, String> {
     let child = Command::new(executable)
         .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .unwrap_or_else(|error| panic!("{name} should launch: {error}"));
+        .map_err(|error| format!("application did not launch: {error}"))?;
     let mut app = AppWindowGuard {
         child,
         window: ptr::null_mut(),
     };
-    let mut window = wait_for_window(marker, WINDOW_TIMEOUT);
+    let mut window = wait_for_window(marker, WINDOW_TIMEOUT)?;
     app.window = window;
     foreground_window(window);
     wait_until(Duration::from_secs(5), || unsafe {
         GetForegroundWindow() == window
-    });
+    })
+    .then_some(())
+    .ok_or_else(|| format!("window containing {marker:?} could not become foreground"))?;
     thread::sleep(if name == "Visual Studio Code" {
         Duration::from_secs(10)
     } else {
@@ -372,9 +384,11 @@ fn launch_and_focus(
     foreground_window(window);
     wait_until(Duration::from_secs(5), || unsafe {
         GetForegroundWindow() == window
-    });
+    })
+    .then_some(())
+    .ok_or_else(|| format!("window containing {marker:?} lost foreground focus"))?;
     thread::sleep(Duration::from_millis(200));
-    app
+    Ok(app)
 }
 
 fn focus_editor_content(window: HWND) {
@@ -623,16 +637,15 @@ fn find_window(marker: &str) -> Option<HWND> {
     (!search.found.is_null()).then_some(search.found)
 }
 
-fn wait_for_window(marker: &str, timeout: Duration) -> HWND {
+fn wait_for_window(marker: &str, timeout: Duration) -> Result<HWND, String> {
     let deadline = Instant::now() + timeout;
     loop {
         if let Some(window) = find_window(marker) {
-            return window;
+            return Ok(window);
         }
-        assert!(
-            Instant::now() < deadline,
-            "window containing {marker:?} did not appear"
-        );
+        if Instant::now() >= deadline {
+            return Err(format!("window containing {marker:?} did not appear"));
+        }
         thread::sleep(Duration::from_millis(50));
     }
 }
@@ -705,13 +718,13 @@ fn restore_foreground(window: HWND) {
     }
 }
 
-fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) {
+fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) -> bool {
     let deadline = Instant::now() + timeout;
     while !condition() {
-        assert!(
-            Instant::now() < deadline,
-            "condition timed out after {timeout:?}"
-        );
+        if Instant::now() >= deadline {
+            return false;
+        }
         thread::sleep(Duration::from_millis(50));
     }
+    true
 }

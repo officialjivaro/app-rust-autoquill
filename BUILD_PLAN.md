@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Phase 1 implementation in progress
+Status: Phase 2C Windows completion beta verified locally; macOS/Linux expansion is next
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -371,27 +371,28 @@ Gate: a blank branded application builds as one raw executable on Windows and CI
 
 ### Phase 1 — Portable product alpha
 
-- [ ] Port typed settings, validation, warnings, WPM conversion, runtime variables, and special-key parsing.
-- [ ] Port deterministic scheduling, pauses, breaks, errors, loops, stop-after behavior, and the session state machine.
-- [ ] Add a fake input backend, manual time, seeded randomness, and complete portable parity tests.
-- [ ] Add versioned profiles and a clear manual legacy-import flow that never imports automatically.
-- [ ] Build the final Jivaro editor-first UI instead of a temporary parity interface.
-- [ ] Connect settings, profiles, visible simulation, progress, ETA, warnings, and session controls.
-- [ ] Compile on Windows, macOS, and Linux CI and refresh the verified Windows `/dist` alpha.
+- [x] Port typed settings, validation, warnings, WPM conversion, runtime variables, and special-key parsing.
+- [x] Port deterministic scheduling, pauses, breaks, errors, loops, stop-after behavior, and the session state machine.
+- [x] Add a fake input backend, manual time, seeded randomness, and complete portable parity tests.
+- [x] Add versioned profiles and a clear manual legacy-import flow that never imports automatically.
+- [x] Build the final Jivaro editor-first UI instead of a temporary parity interface.
+- [x] Connect settings, profiles, visible simulation, progress, ETA, warnings, and session controls.
+- [x] Compile on Windows, macOS, and Linux CI and refresh the verified Windows `/dist` alpha.
 
 Gate: all portable v0.13 behavior is available through the modern UI, and a user can complete a clearly labelled simulated session without external keystrokes.
 
 ### Phase 2 — Windows feature-complete beta
 
-- [ ] Port foreground Unicode and special-key injection.
-- [ ] Port native background target capture, validation, and message injection.
-- [ ] Port browser foreground assist, focus-loss protection, and useful failure reporting.
-- [ ] Register expanded global shortcuts and active-session Escape behavior.
-- [ ] Add Windows capability, tray, icon, version metadata, and portable-artifact integration.
-- [ ] Test Unicode, emoji, special keys, stop/pause responsiveness, focus loss, closed targets, browsers, and native controls.
-- [ ] Compare behavior with Python v0.13 and measure the optimized executable.
+- [x] Port foreground Unicode and special-key injection.
+- [x] Port native background target capture, validation, and message injection.
+- [x] Add automatic protected-foreground fallback, focus-loss protection, and useful failure reporting for browsers and custom controls.
+- [x] Register expanded global shortcuts and active-session Escape behavior.
+- [x] Add Windows capability disclosure, icon, version metadata, and portable-artifact integration. Tray behavior is deliberately deferred to release hardening.
+- [x] Test Unicode, emoji, special keys, stop/pause responsiveness, focus loss, closed targets, browsers, and native controls.
+- [x] Preserve the established v0.13 parity fixtures and measure the optimized executable.
 
-Gate: Windows passes the parity and clean-machine matrices and the verified beta replaces `/dist`.
+Local Phase 2C gate: passed on 2026-08-24 and the verified beta replaced `/dist`. A separate
+clean-machine/trust pass remains in release hardening before a stable release.
 
 ### Phase 3 — macOS and Linux expansion
 
@@ -473,15 +474,12 @@ Gate: reproducible release artifacts pass all advertised platform and clean-mach
 
 ## 13. Definition of the next implementation milestone
 
-The next milestone is the first Phase 1 slice:
+The next milestone is Phase 3 platform expansion planning and capability spikes:
 
-- Typed settings and profile-domain models.
-- Exact v0.13 defaults and normalization rules.
-- Warning generation and WPM conversion.
-- Focused unit tests with no Slint or platform dependency.
-
-Later Phase 1 slices add parsing, deterministic sessions, deliberate profile import, and the modern
-simulation UI before native input is enabled.
+- Define macOS permission onboarding and a foreground-input prototype on native Apple hardware.
+- Define Linux runtime capability detection before choosing X11 and Wayland implementation crates.
+- Keep Simulation available everywhere and advertise native input only after each platform-specific
+  permission, shortcut, editor, and browser matrix passes.
 
 ## 14. Decision log
 
@@ -496,3 +494,9 @@ simulation UI before native input is enabled.
 - 2026-08-21: All platforms keep the existing `~/Jivaro/AutoQuill` user-data root and
   `Data/Saves` profile folder instead of migrating to operating-system-specific app-data paths.
 - 2026-08-21: `/dist` is refreshed once after the complete Phase 1 gate, not after each internal work package.
+- 2026-08-24: Sticky Auto uses a narrow native-control allowlist and automatically selects
+  Foreground Protected for browsers, custom controls, unknown classes, or background-unsafe
+  documents before typing begins.
+- 2026-08-24: Global shortcuts support F1–F12 and recorded modifier combinations; bare Escape is
+  registered only while a Real Typing session is active. Windows tray behavior is deferred to
+  release hardening.

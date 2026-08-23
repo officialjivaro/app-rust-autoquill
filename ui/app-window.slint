@@ -113,6 +113,7 @@ export component AppWindow inherits Window {
     in-out property <bool> hotkey-ready: false;
     in-out property <string> hotkey-status: "REGISTERING F1";
     in-out property <string> target-name: "No target captured";
+    in-out property <string> target-delivery: "NOT CAPTURED";
 
     in-out property <bool> profile-manager-open: false;
     in-out property <[ProfileListItem]> profile-items: [];
@@ -129,7 +130,8 @@ export component AppWindow inherits Window {
     in-out property <string> dialog-secondary-label: "";
     in-out property <string> dialog-tertiary-label: "";
 
-    in-out property <int> shortcut-number: 1;
+    in-out property <string> shortcut-text: "F1";
+    in-out property <bool> shortcut-recording: false;
     in-out property <bool> sticky-typing: false;
     in-out property <bool> startup-delay-enabled: false;
     in-out property <bool> stop-after-enabled: false;
@@ -165,7 +167,8 @@ export component AppWindow inherits Window {
     callback confirm-real-typing();
     callback cancel-real-typing();
     callback real-start-help();
-    callback shortcut-changed(int);
+    callback shortcut-changed(string);
+    callback shortcut-recorded(string, bool, bool, bool, bool);
     callback settings-edited();
     callback open-profile-manager();
     callback profile-search-edited(string);
@@ -188,7 +191,7 @@ export component AppWindow inherits Window {
     callback reset-window();
 
     changed wpm => { root.settings-edited(); }
-    changed shortcut-number => { root.settings-edited(); root.shortcut-changed(root.shortcut-number); }
+    changed shortcut-text => { root.settings-edited(); root.shortcut-changed(root.shortcut-text); }
     changed sticky-typing => { root.settings-edited(); }
     changed startup-delay-enabled => { root.settings-edited(); }
     changed stop-after-enabled => { root.settings-edited(); }
@@ -231,6 +234,20 @@ export component AppWindow inherits Window {
         height: root.height;
 
         key-pressed(event) => {
+            if (root.shortcut-recording) {
+                if (event.text == Key.Escape) {
+                    root.shortcut-recording = false;
+                } else {
+                    root.shortcut-recorded(
+                        event.text,
+                        event.modifiers.control,
+                        event.modifiers.alt,
+                        event.modifiers.shift,
+                        event.modifiers.meta
+                    );
+                }
+                return accept;
+            }
             if (event.text == Key.Escape) {
                 if (root.dialog-open) {
                     root.dialog-tertiary();
@@ -540,7 +557,7 @@ export component AppWindow inherits Window {
                         font-weight: 750;
                     }
                     Text {
-                        text: root.real-typing-selected ? (root.session-active ? "Locked to " + root.target-name : "Focus the destination, then press F" + root.shortcut-number + ".") : "Special keys appear between ‹ › markers.";
+                        text: root.real-typing-selected ? (root.session-active ? root.target-delivery + " • " + root.target-name : "Focus the destination, then press " + root.shortcut-text + ".") : "Special keys appear between ‹ › markers.";
                         color: JivaroTheme.text-secondary;
                         font-family: "Inter";
                         font-size: 11px;
@@ -626,7 +643,7 @@ export component AppWindow inherits Window {
 
                         JivaroButton {
                             horizontal-stretch: 1;
-                            label: root.session-active ? "STOP" : (root.real-typing-selected ? "FOCUS APP • PRESS F" + root.shortcut-number : "START SIMULATION");
+                            label: root.session-active ? "STOP" : (root.real-typing-selected ? "FOCUS APP • PRESS " + root.shortcut-text : "START SIMULATION");
                             primary: true;
                             enabled: root.session-active || (root.can-start && (!root.real-typing-selected || (root.real-typing-confirmed && root.hotkey-ready)));
                             clicked => {
@@ -819,14 +836,34 @@ export component AppWindow inherits Window {
                                     font-size: 11px;
                                     wrap: word-wrap;
                                 }
-                                SettingValue {
-                                    label: "Shortcut (F-key)";
-                                    minimum: 1;
-                                    maximum: 12;
-                                    value <=> root.shortcut-number;
+                                HorizontalLayout {
+                                    min-height: 40px;
+                                    max-height: 40px;
+                                    spacing: 9px;
+                                    alignment: center;
+
+                                    Text {
+                                        text: "Start / stop shortcut";
+                                        color: JivaroTheme.text-secondary;
+                                        font-family: "Inter";
+                                        font-size: 11px;
+                                        horizontal-stretch: 1;
+                                    }
+                                    JivaroButton {
+                                        min-width: 190px;
+                                        max-width: 190px;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: root.shortcut-recording ? "PRESS SHORTCUT…" : root.shortcut-text;
+                                        enabled: !root.session-active;
+                                        clicked => {
+                                            root.shortcut-recording = true;
+                                            app-key-handler.focus();
+                                        }
+                                    }
                                 }
                                 CheckBox {
-                                    text: "Sticky target when native typing arrives";
+                                    text: "Sticky Auto (safe native controls only)";
                                     checked <=> root.sticky-typing;
                                 }
                                 CheckBox {
@@ -869,7 +906,7 @@ export component AppWindow inherits Window {
                                         y: 8px;
                                         width: parent.width - 22px;
                                         height: parent.height - 16px;
-                                        text: "Active time excludes manual pauses. Loop waits reset progress for each pass.";
+                                        text: "Sticky Auto uses background delivery only for verified native edit controls and safe documents. Otherwise AutoQuill discloses and uses protected foreground typing.";
                                         color: JivaroTheme.text-secondary;
                                         font-family: "Inter";
                                         font-size: 11px;
@@ -1235,7 +1272,7 @@ export component AppWindow inherits Window {
                     font-weight: 820;
                 }
                 Text {
-                    text: "AutoQuill will send the prepared actions to whichever external window is foreground when you press F" + root.shortcut-number + ". It waits 2 seconds, then stops immediately if that exact window loses focus or closes.";
+                    text: "AutoQuill captures the external destination that is foreground when you press " + root.shortcut-text + ". It waits 2 seconds. Sticky Auto uses background delivery only when the target and full document pass strict safety checks.";
                     color: JivaroTheme.text-secondary;
                     font-family: "Inter";
                     font-size: 12px;
@@ -1253,7 +1290,7 @@ export component AppWindow inherits Window {
                         y: 9px;
                         width: parent.width - 24px;
                         height: parent.height - 18px;
-                        text: "Before starting: preview the document, place the destination cursor carefully, close sensitive fields, and keep your hands ready. Press the same F-key again to stop.";
+                        text: "Before starting: preview the document, place the destination cursor carefully, and close sensitive fields. Press " + root.shortcut-text + " again or press Escape to stop immediately.";
                         color: JivaroTheme.text-secondary;
                         font-family: "Inter";
                         font-size: 11px;

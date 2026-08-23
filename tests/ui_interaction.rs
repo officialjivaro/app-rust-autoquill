@@ -119,6 +119,44 @@ fn minimum_size_keeps_the_stacked_workspace_and_drawer_accessible() {
     assert!(*reset_requested.borrow());
 }
 
+#[test]
+fn shortcut_recorder_accepts_pointer_and_modifier_keyboard_input() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
+    app.set_advanced_open(true);
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::from_millis(150));
+
+    let recorded = Rc::new(RefCell::new(None));
+    let callback_result = Rc::clone(&recorded);
+    app.on_shortcut_recorded(move |text, control, alt, shift, meta| {
+        *callback_result.borrow_mut() = Some((text.to_string(), control, alt, shift, meta));
+    });
+
+    ElementHandle::find_by_accessible_label(&app, "F1")
+        .next()
+        .expect("shortcut recorder should be exposed to accessibility")
+        .invoke_accessible_default_action();
+    assert!(app.get_shortcut_recording());
+
+    let control: slint::SharedString = slint::platform::Key::Control.into();
+    app.window().dispatch_event(WindowEvent::KeyPressed {
+        text: control.clone(),
+    });
+    app.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: "q".into() });
+    app.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: "q".into() });
+    app.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: control });
+
+    assert_eq!(
+        recorded.borrow().as_ref(),
+        Some(&("q".to_owned(), true, false, false, false))
+    );
+}
+
 fn scan_for_click(
     app: &AppWindow,
     result: &Rc<RefCell<bool>>,

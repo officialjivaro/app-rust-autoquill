@@ -1,11 +1,12 @@
 # Distribution artifacts
 
-`AutoQuill-windows-x64.exe` is the unsigned portable Windows x64 responsive-interface beta
-(`0.15.0-beta.1`).
+`AutoQuill-windows-x64.exe` is the unsigned portable Windows x64 completion beta
+(`0.16.0-beta.1`).
 
-This build includes safe Simulation, explicitly confirmed foreground Real Typing, bare F1–F12
-global Start/Stop, transactional conflict fallback, repeat/restart suppression, strict target-loss
-handling, Unicode and special-key input, complete portable settings, schema-v2 profile management,
-and the responsive 1280×720 editor-first interface. Simulation is selected every launch.
-Sticky/background typing and native input on macOS/Linux are not included yet. Verify the download
-against `SHA256SUMS.txt`.
+This build includes safe Simulation, explicitly confirmed Real Typing, Sticky Auto for verified
+native edit controls, automatic Foreground Protected fallback for browsers/unknown controls and
+background-unsafe documents, recorded F1–F12 or modifier shortcuts, active-session emergency
+Escape, transactional conflict fallback, strict target validation, embedded Windows icon/version
+metadata, Unicode and special-key input, schema-v2 profiles, and the responsive 1280×720 interface.
+Simulation is selected every launch. Native input on macOS/Linux is not included yet. Verify the
+download against `SHA256SUMS.txt`.

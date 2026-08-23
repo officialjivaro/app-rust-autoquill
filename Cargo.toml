@@ -1,13 +1,20 @@
 [package]
 name = "autoquill"
-version = "0.15.0-beta.1"
+version = "0.16.0-beta.1"
 edition = "2024"
 rust-version = "1.97"
 description = "A compact, cross-platform automatic typing assistant"
 homepage = "https://jivaro.net"
-repository = "https://github.com/officialjivaro/AutoQuill"
+repository = "https://github.com/officialjivaro/rust-autoquill"
 publish = false
 build = "build.rs"
+
+[package.metadata.winresource]
+ProductName = "AutoQuill"
+CompanyName = "Jivaro LLC"
+FileDescription = "AutoQuill automatic typing assistant"
+OriginalFilename = "AutoQuill.exe"
+LegalCopyright = "Copyright (c) 2026 Jivaro LLC"
 
 [features]
 default = ["renderer-software"]
@@ -48,6 +55,9 @@ windows-sys = { version = "=0.61.2", features = [
 
 [build-dependencies]
 slint-build = "=1.17.1"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "=0.1.31"
 
 [dev-dependencies]
 i-slint-backend-testing = "=1.17.1"

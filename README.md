@@ -2,18 +2,19 @@
 
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
 The current source includes a branded, interactive editor, a safe simulation preview, and an
-explicitly armed Windows foreground-typing beta backed by the same portable compiler and session
-engine. The responsive interface opens at 1280×720, scales freely down to a usable 960×600
+explicitly armed Windows Real Typing beta backed by the same portable compiler and session engine.
+Sticky Auto safely selects native background delivery or protected foreground delivery before a
+run begins. The responsive interface opens at 1280×720, scales freely down to a usable 960×600
 minimum, and converts from an editor-first two-column workspace to a scrollable stacked layout at
 narrow widths. The Windows reliability matrix covers Notepad, Edge, Chrome, target loss, and
-global-key stress. Start/Stop, Pause/Resume, Reset, startup delay, active-time limits, loops,
+global-shortcut stress. Start/Stop, Pause/Resume, Reset, startup delay, active-time limits, loops,
 breaks, short pauses, and visible simulated corrections are functional. Profiles keep the draft
 and every setting together, including deliberate legacy import and recoverable upgrades.
 
 The product roadmap is in [BUILD_PLAN.md](BUILD_PLAN.md), with the work-package sequence in
 [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
 
-## Windows foreground-typing beta
+## Windows Real Typing beta
 
 The latest verified Windows x64 executable is available at
 [`dist/AutoQuill-windows-x64.exe`](dist/AutoQuill-windows-x64.exe). `/dist` is refreshed only after
@@ -26,15 +27,22 @@ machine.
 
 Simulation is selected on every launch and never emits external keystrokes. On Windows, choosing
 **Real Typing** requires an explicit confirmation each launch. Focus the exact destination window
-and press the configured bare F1–F12 key to capture it; the same key stops the session. Real Typing
-always waits two seconds, validates the foreground window before every operation, and stops
-immediately if that window changes or closes. AutoQuill refuses to target itself and blocks a run
-when its activation F-key also appears in the document. Activation-key rebinding is transactional:
-if the new key is occupied, the old key stays available as an emergency Stop but cannot start a new
-run. Queued/repeated key events cannot restart a session immediately after Stop.
+and press the recorded shortcut to capture it; F1–F12 and modifier combinations such as
+`Ctrl+Shift+Space` are supported. The same shortcut stops the session, and Escape is registered as
+an additional emergency Stop only while Real Typing is active. Real Typing always waits two
+seconds and validates the exact root and focused child controls before every operation.
 
-Real Typing is not yet enabled on macOS or Linux. Sticky/background targeting is also deferred;
-this beta deliberately supports strict foreground typing only.
+With **Sticky Auto** enabled, verified native `Edit`, RichEdit, and Windows Forms edit controls can
+receive a conservative set of text/navigation messages after another app comes foreground.
+Browsers, Electron/custom controls, unknown classes, and documents containing background-unsafe
+special keys are disclosed as **Foreground Protected** before typing begins. Protected sessions
+stop immediately if the required focus changes. AutoQuill never steals focus, refuses to target
+itself, and blocks only an unmodified F-key document token that exactly conflicts with the active
+shortcut. Shortcut rebinding remains transactional, so a failed replacement does not remove the
+working Stop shortcut. Queued/repeated events cannot restart a session immediately after Stop.
+
+Real Typing is not yet enabled on macOS or Linux. Those platforms continue to provide Simulation
+until their native permission and input backends pass their own matrices.
 
 ## Profiles
 
@@ -81,7 +89,7 @@ cargo run
 ```
 
 All Windows native-input probes are excluded from normal tests. Run them only on an interactive
-desktop where temporary documents, isolated browser profiles, and controlled F-keys may be used:
+desktop where temporary documents, isolated browser profiles, and controlled shortcuts may be used:
 
 ```text
 cargo test --test windows_native_input -- --ignored
@@ -89,8 +97,8 @@ cargo test --test windows_hotkey_stress -- --ignored --nocapture --test-threads=
 cargo test --test windows_compatibility_matrix -- --ignored --nocapture --test-threads=1
 ```
 
-See [docs/PHASE2B_WINDOWS_RELIABILITY.md](docs/PHASE2B_WINDOWS_RELIABILITY.md) for the exact matrix,
-known VS Code harness limitation, and release evidence.
+See [docs/PHASE2C_WINDOWS_COMPLETION.md](docs/PHASE2C_WINDOWS_COMPLETION.md) for Sticky Auto,
+shortcut, Escape, metadata, matrix, and release evidence.
 
 Development and test profiles disable debug-symbol and incremental caches to keep storage usage
 manageable. After preserving a verified release executable, remove Cargo artifacts with:
@@ -114,8 +122,8 @@ For the FemtoVG comparison build:
 cargo build --profile release-size --locked --no-default-features --features renderer-femtovg
 ```
 
-The packaged raw executable embeds the Slint markup and image resources. Platform-specific bundles
-and installers will be added during the packaging phase.
+The packaged raw executable embeds the Slint markup, image resources, Windows icon, and version
+metadata. Platform-specific bundles and installers will be added during release hardening.
 
 See [docs/DEPENDENCY_SAFETY.md](docs/DEPENDENCY_SAFETY.md) for the locked dependency safeguard
 added after an unexpected build-script download attempt was observed during a clean rebuild.

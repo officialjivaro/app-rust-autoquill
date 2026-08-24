@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Phase 2C Windows completion beta verified locally; platform expansion is next
+Status: Phase 3 compile-only backend package implemented; native hardware gates remain open
 Last updated: 2026-08-24
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
@@ -389,6 +389,11 @@ and the verified beta replaces `/dist`.
 
 Each backend has an independent gate. The UI advertises only proven capabilities.
 
+The `0.17.0-beta.1` package establishes the shared capability contract and compile-gated macOS and
+Linux X11 source backends. It does not publish those platforms: their native hardware matrices and
+artifact gates below remain open. Wayland is intentionally Simulation-only pending tested portal
+and libei consent flows.
+
 ### 3A. macOS
 
 - Build Apple Silicon and Intel separately before Universal 2.
@@ -424,10 +429,10 @@ Start.
 
 ### Dependency checkpoint
 
-- `global-hotkey` is a macOS/X11 candidate, not a Wayland solution. Prove its event-loop behavior
-  with Slint before adoption.
-- `enigo` is a prototype candidate for macOS/X11. Its Wayland/libei paths remain experimental, so
-  the portable engine never depends on it directly.
+- `global-hotkey 0.8.0` is pinned for the compile-only macOS/X11 backend, not Wayland. Its native
+  event-loop behavior still requires the platform matrices before publication.
+- `enigo 0.6.1` is pinned without Wayland support for compile-only macOS/X11 foreground input. The
+  portable engine does not depend on it directly.
 - `ashpd` is the preferred portal-client candidate for Wayland Global Shortcuts and Remote Desktop.
 - Windows remains native because AutoQuill needs behavior beyond generic input libraries.
 - Pin selected versions and features only after size, license, event-loop, and behavior spikes.
@@ -534,7 +539,8 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Implement and verify Sticky Auto targeting`
 - [x] `Add modifier shortcut recording and active-session emergency Escape`
 - [x] `Embed Windows icon/version resources and refresh the verified Phase 2C dist beta`
-- [ ] `Plan and implement native macOS permission, input, and shortcut support`
+- [x] `Add capability-aware compile-only macOS and Linux X11 backends`
+- [ ] `Complete native macOS and Linux hardware matrices before publishing artifacts`
 
 The Windows feature package is locally complete. Clean-machine trust checks, tray behavior, signing,
 and installer work remain release-hardening tasks rather than blockers for Phase 3 platform work.

@@ -3,6 +3,8 @@
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
 The current source includes a branded, interactive editor, a safe simulation preview, and an
 explicitly armed Windows Real Typing beta backed by the same portable compiler and session engine.
+Compile-gated macOS and Linux X11 backends now share that engine while reporting their unverified
+status and operating-system limitations directly in the UI.
 Sticky Auto safely selects native background delivery or protected foreground delivery before a
 run begins. The responsive interface opens at 1280×720, scales freely down to a usable 960×600
 minimum, and converts from an editor-first two-column workspace to a scrollable stacked layout at
@@ -41,8 +43,20 @@ itself, and blocks only an unmodified F-key document token that exactly conflict
 shortcut. Shortcut rebinding remains transactional, so a failed replacement does not remove the
 working Stop shortcut. Queued/repeated events cannot restart a session immediately after Stop.
 
-Real Typing is not yet enabled on macOS or Linux. Those platforms continue to provide Simulation
-until their native permission and input backends pass their own matrices.
+Platform support is deliberately capability-based:
+
+| Platform | Real Typing | Global shortcut | Sticky Auto | Verification |
+|---|---|---|---|---|
+| Windows x64 | Available | Available | Compatible controls | Verified beta |
+| macOS Apple Silicon/Intel | Accessibility permission required | Compile-only experiment | Unavailable | Compile-only |
+| Linux X11 x64 | Compile-only experiment | Compile-only experiment | Unavailable | Compile-only |
+| Linux Wayland | Simulation only | Unavailable | Unavailable | Portal work deferred |
+
+The macOS and Linux source backends are not published or hardware-certified yet. macOS re-checks
+Accessibility permission before enabling Real Typing. Linux detects X11 versus Wayland at runtime;
+Wayland refuses unrestricted synthetic input and keeps Simulation available rather than claiming
+support that the compositor may prohibit. See
+[docs/PHASE3_COMPILE_ONLY_PACKAGE.md](docs/PHASE3_COMPILE_ONLY_PACKAGE.md) for the exact test boundary.
 
 ## Profiles
 

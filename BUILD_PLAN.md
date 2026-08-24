@@ -1,6 +1,6 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Phase 2C Windows completion beta verified locally; macOS/Linux expansion is next
+Status: Phase 3 compile-only macOS/Linux backend package implemented; native hardware gates remain
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -400,8 +400,13 @@ clean-machine/trust pass remains in release hardening before a stable release.
 - [ ] Build and test Apple Silicon and Intel before producing Universal 2 when practical.
 - [ ] Implement Linux X11 input and shortcuts.
 - [ ] Implement Wayland Global Shortcuts and permission-mediated portal/libei input where available.
-- [ ] Add platform onboarding and capability messaging to the existing product UI.
+- [x] Add platform onboarding and capability messaging to the existing product UI.
 - [ ] Complete the native editor, browser, compositor, permission, and architecture matrices.
+
+The `0.17.0-beta.1` compile package adds target-specific macOS and Linux X11 foreground-input and
+shortcut backends, runtime X11/Wayland detection, macOS Accessibility re-check guidance, and safe
+Wayland refusal. These source backends remain compile-only experiments until their native hardware
+matrices pass; only the Windows executable is published in `/dist`.
 
 Gate: every published platform completes onboarding and a real session, with unavailable capabilities explained before Start.
 
@@ -474,10 +479,14 @@ Gate: reproducible release artifacts pass all advertised platform and clean-mach
 
 ## 13. Definition of the next implementation milestone
 
-The next milestone is Phase 3 platform expansion planning and capability spikes:
+The next milestone is native Phase 3 validation and permission hardening:
 
-- Define macOS permission onboarding and a foreground-input prototype on native Apple hardware.
-- Define Linux runtime capability detection before choosing X11 and Wayland implementation crates.
+- Run the macOS permission, native-editor, browser, shortcut, sleep/wake, and architecture matrix on
+  Apple hardware before publishing an app bundle.
+- Run the Linux X11 editor/browser/shortcut matrix on Ubuntu and KDE hardware before publishing a
+  Linux executable.
+- Prototype Wayland Global Shortcuts and permission-mediated portal/libei input only on hardware
+  where the compositor workflows can be tested safely.
 - Keep Simulation available everywhere and advertise native input only after each platform-specific
   permission, shortcut, editor, and browser matrix passes.
 
@@ -500,3 +509,6 @@ The next milestone is Phase 3 platform expansion planning and capability spikes:
 - 2026-08-24: Global shortcuts support F1–F12 and recorded modifier combinations; bare Escape is
   registered only while a Real Typing session is active. Windows tray behavior is deferred to
   release hardening.
+- 2026-08-24: macOS and Linux X11 source backends are compile-only experiments until native
+  permission, input, shortcut, editor, and browser matrices pass. Wayland stays Simulation-only
+  until consent-based portal/libei behavior can be tested on supported compositors.

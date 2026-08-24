@@ -7,15 +7,23 @@ use crate::{
     typing::{Instruction, SpecialKey},
 };
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 use crate::domain::TargetIntent;
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 use crate::typing::PreviewOperation;
+
+mod capabilities;
+
+pub use capabilities::{
+    CapabilityReport, CapabilityState, PlatformKind, VerificationLevel, classify_linux_session,
+    report_for,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NativeInputError {
-    Unsupported,
+    Unsupported(String),
+    PermissionRequired(String),
     NoTarget,
     OwnWindow,
     TargetClosed,
@@ -27,9 +35,9 @@ pub enum NativeInputError {
 impl fmt::Display for NativeInputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unsupported => formatter.write_str(
-                "Real Typing is currently available on Windows only. Simulation remains available.",
-            ),
+            Self::Unsupported(message) | Self::PermissionRequired(message) => {
+                formatter.write_str(message)
+            }
             Self::NoTarget => formatter.write_str(
                 "No foreground target was found. Focus the destination app and press the activation key again.",
             ),
@@ -64,6 +72,30 @@ pub struct ForegroundTarget {
 }
 
 impl ForegroundTarget {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) fn platform_foreground(handle: usize, process_id: u32, label: String) -> Self {
+        Self {
+            root_handle: handle,
+            input_handle: handle,
+            root_process_id: process_id,
+            input_process_id: process_id,
+            root_class: String::new(),
+            input_class: String::new(),
+            label,
+            delivery: DeliveryStrategy::ForegroundProtected,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) const fn platform_handle(&self) -> usize {
+        self.root_handle
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) const fn platform_process_id(&self) -> u32 {
+        self.root_process_id
+    }
+
     #[must_use]
     pub fn label(&self) -> &str {
         &self.label
@@ -115,11 +147,32 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{ForegroundBackend, HotkeyService};
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod macos;
+
+#[cfg(target_os = "macos")]
+pub use macos::ForegroundBackend;
+
+#[cfg(target_os = "linux")]
+mod linux;
+
+#[cfg(target_os = "linux")]
+pub use linux::ForegroundBackend;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod portable_hotkey;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use portable_hotkey::HotkeyService;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod portable_input;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 #[derive(Debug, Default)]
 pub struct ForegroundBackend;
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 impl ForegroundBackend {
     #[must_use]
     pub const fn available() -> bool {
@@ -131,7 +184,10 @@ impl ForegroundBackend {
         _intent: TargetIntent,
         _instructions: &[Instruction],
     ) -> Result<ForegroundTarget, NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Real Typing is unavailable on this operating system. Simulation remains available."
+                .into(),
+        ))
     }
 
     pub fn capture_foreground(&self) -> Result<ForegroundTarget, NativeInputError> {
@@ -139,7 +195,10 @@ impl ForegroundBackend {
     }
 
     pub fn validate(&self, _target: &ForegroundTarget) -> Result<(), NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Real Typing is unavailable on this operating system. Simulation remains available."
+                .into(),
+        ))
     }
 
     pub fn emit(
@@ -147,29 +206,62 @@ impl ForegroundBackend {
         _target: &ForegroundTarget,
         _operation: &PreviewOperation,
     ) -> Result<(), NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Real Typing is unavailable on this operating system. Simulation remains available."
+                .into(),
+        ))
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 #[derive(Debug)]
 pub struct HotkeyService;
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 impl HotkeyService {
     pub fn start(
         _shortcut: Shortcut,
     ) -> Result<(Self, std::sync::mpsc::Receiver<HotkeyEvent>), NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Global shortcuts are unavailable on this operating system.".into(),
+        ))
     }
 
     pub fn set_shortcut(&self, _shortcut: Shortcut) -> Result<(), NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Global shortcuts are unavailable on this operating system.".into(),
+        ))
     }
 
     pub fn set_escape_active(&self, _active: bool) -> Result<(), NativeInputError> {
-        Err(NativeInputError::Unsupported)
+        Err(NativeInputError::Unsupported(
+            "Global shortcuts are unavailable on this operating system.".into(),
+        ))
     }
+}
+
+#[must_use]
+pub fn current_capabilities() -> CapabilityReport {
+    #[cfg(windows)]
+    {
+        return report_for(PlatformKind::Windows, true);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return report_for(
+            PlatformKind::MacOs,
+            macos::accessibility_permission_granted(),
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return report_for(linux::session_kind(), true);
+    }
+
+    #[allow(unreachable_code)]
+    report_for(PlatformKind::Unsupported, false)
 }
 
 #[must_use]
@@ -194,6 +286,7 @@ pub fn document_uses_activation_shortcut(instructions: &[Instruction], shortcut:
 }
 
 #[must_use]
+#[cfg(any(windows, test))]
 pub(crate) fn instructions_support_background_delivery(instructions: &[Instruction]) -> bool {
     instructions.iter().all(|instruction| match instruction {
         Instruction::Character(_) => true,

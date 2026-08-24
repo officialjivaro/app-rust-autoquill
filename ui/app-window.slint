@@ -110,6 +110,12 @@ export component AppWindow inherits Window {
     in-out property <bool> real-typing-available: false;
     in-out property <bool> real-typing-confirmed: false;
     in-out property <bool> real-typing-confirm-open: false;
+    in-out property <string> platform-status: "SIMULATION ONLY";
+    in-out property <string> platform-summary: "Real Typing capability has not been detected.";
+    in-out property <string> platform-guidance: "Continue with Simulation.";
+    in-out property <string> platform-footer: "Simulation is the default every launch • no native input.";
+    in-out property <bool> native-behavior-verified: false;
+    in-out property <bool> sticky-typing-supported: false;
     in-out property <bool> hotkey-ready: false;
     in-out property <string> hotkey-status: "REGISTERING F1";
     in-out property <string> target-name: "No target captured";
@@ -166,6 +172,7 @@ export component AppWindow inherits Window {
     callback request-real-typing();
     callback confirm-real-typing();
     callback cancel-real-typing();
+    callback refresh-platform-capabilities();
     callback real-start-help();
     callback shortcut-changed(string);
     callback shortcut-recorded(string, bool, bool, bool, bool);
@@ -524,12 +531,23 @@ export component AppWindow inherits Window {
                                 horizontal-stretch: 1;
                                 min-height: 34px;
                                 max-height: 34px;
-                                label: "REAL TYPING";
+                                label: root.real-typing-available ? "REAL TYPING" : "REAL TYPING • INFO";
                                 primary: root.real-typing-selected;
-                                enabled: root.real-typing-available && !root.session-active;
+                                enabled: !root.session-active;
                                 clicked => { root.request-real-typing(); }
                             }
                         }
+                    }
+
+                    Text {
+                        min-height: 18px;
+                        max-height: 18px;
+                        text: root.platform-status + "  •  " + root.platform-summary;
+                        color: root.real-typing-available ? JivaroTheme.accent : JivaroTheme.text-muted;
+                        font-family: "Consolas";
+                        font-size: 9px;
+                        font-weight: 650;
+                        overflow: elide;
                     }
 
                     HorizontalLayout {
@@ -705,7 +723,7 @@ export component AppWindow inherits Window {
             spacing: 12px;
             alignment: center;
             Text {
-                text: root.real-typing-selected ? "Real Typing is Windows beta • focus changes stop immediately." : "Simulation is the default every launch • no native input.";
+                text: root.platform-footer;
                 color: JivaroTheme.text-muted;
                 font-family: "Inter";
                 font-size: 10px;
@@ -863,8 +881,9 @@ export component AppWindow inherits Window {
                                     }
                                 }
                                 CheckBox {
-                                    text: "Sticky Auto (safe native controls only)";
+                                    text: root.sticky-typing-supported ? "Sticky Auto (safe native controls only)" : "Sticky Auto (not available on this platform)";
                                     checked <=> root.sticky-typing;
+                                    enabled: root.sticky-typing-supported;
                                 }
                                 CheckBox {
                                     text: "2-second startup delay";
@@ -906,7 +925,7 @@ export component AppWindow inherits Window {
                                         y: 8px;
                                         width: parent.width - 22px;
                                         height: parent.height - 16px;
-                                        text: "Sticky Auto uses background delivery only for verified native edit controls and safe documents. Otherwise AutoQuill discloses and uses protected foreground typing.";
+                                        text: root.sticky-typing-supported ? "Sticky Auto uses background delivery only for verified native edit controls and safe documents. Otherwise AutoQuill discloses and uses protected foreground typing." : "This platform is foreground-only. AutoQuill validates the captured application before every operation and stops when it changes.";
                                         color: JivaroTheme.text-secondary;
                                         font-family: "Inter";
                                         font-size: 11px;
@@ -1250,8 +1269,8 @@ export component AppWindow inherits Window {
 
         confirm-panel := Rectangle {
             width: min(root.width - 48px, 560px);
-            min-height: 330px;
-            max-height: 330px;
+            min-height: 380px;
+            max-height: 380px;
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
             border-radius: 18px;
@@ -1263,24 +1282,24 @@ export component AppWindow inherits Window {
                 padding: 24px;
                 spacing: 15px;
 
-                MetaLabel { text: "WINDOWS BETA • EXPLICIT OPT-IN"; }
+                MetaLabel { text: root.platform-status; }
                 Text {
-                    text: "ENABLE REAL TYPING?";
+                    text: root.real-typing-available ? "ENABLE REAL TYPING?" : "REAL TYPING STATUS";
                     color: JivaroTheme.text-primary;
                     font-family: "Inter";
                     font-size: 22px;
                     font-weight: 820;
                 }
                 Text {
-                    text: "AutoQuill captures the external destination that is foreground when you press " + root.shortcut-text + ". It waits 2 seconds. Sticky Auto uses background delivery only when the target and full document pass strict safety checks.";
+                    text: root.platform-summary + " " + root.platform-guidance;
                     color: JivaroTheme.text-secondary;
                     font-family: "Inter";
                     font-size: 12px;
                     wrap: word-wrap;
                 }
                 Rectangle {
-                    min-height: 76px;
-                    max-height: 76px;
+                    min-height: 88px;
+                    max-height: 88px;
                     border-radius: 10px;
                     background: JivaroTheme.accent-soft;
                     border-width: 1px;
@@ -1290,7 +1309,7 @@ export component AppWindow inherits Window {
                         y: 9px;
                         width: parent.width - 24px;
                         height: parent.height - 18px;
-                        text: "Before starting: preview the document, place the destination cursor carefully, and close sensitive fields. Press " + root.shortcut-text + " again or press Escape to stop immediately.";
+                        text: root.native-behavior-verified ? "Before starting: preview the document, place the destination cursor carefully, and close sensitive fields. Press " + root.shortcut-text + " again or press Escape to stop immediately." : "COMPILE-ONLY EXPERIMENT: native behavior has not been tested on this operating system. Use only in a disposable document. Do not use sensitive fields or important data.";
                         color: JivaroTheme.text-secondary;
                         font-family: "Inter";
                         font-size: 11px;
@@ -1311,9 +1330,15 @@ export component AppWindow inherits Window {
                     }
                     JivaroButton {
                         min-width: 164px;
-                        label: "I UNDERSTAND • ENABLE";
+                        label: root.real-typing-available ? "I UNDERSTAND • ENABLE" : "RE-CHECK";
                         primary: true;
-                        clicked => { root.confirm-real-typing(); }
+                        clicked => {
+                            if (root.real-typing-available) {
+                                root.confirm-real-typing();
+                            } else {
+                                root.refresh-platform-capabilities();
+                            }
+                        }
                     }
                 }
             }

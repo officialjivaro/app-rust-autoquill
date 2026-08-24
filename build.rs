@@ -1,5 +1,10 @@
 fn main() {
-    compile_windows_resources();
+    if matches!(
+        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("windows")
+    ) {
+        compile_windows_resources();
+    }
 
     let mut config = slint_build::CompilerConfiguration::new()
         .with_style("fluent-dark".into())
@@ -24,8 +29,8 @@ fn compile_windows_resources() {
     let mut resource = winresource::WindowsResource::new();
     resource
         .set_icon("assets/icon.ico")
-        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0010_0000_0001)
-        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0010_0000_0001);
+        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0011_0000_0001)
+        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0011_0000_0001);
     resource
         .compile()
         .expect("failed to compile Windows icon and version resources");

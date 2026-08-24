@@ -19,8 +19,8 @@ use autoquill::{
         WindowPreferences,
     },
     platform::{
-        DeliveryStrategy, ForegroundBackend, ForegroundTarget, HotkeyEvent, HotkeyService,
-        document_uses_activation_shortcut,
+        CapabilityReport, DeliveryStrategy, ForegroundBackend, ForegroundTarget, HotkeyEvent,
+        HotkeyService, VerificationLevel, current_capabilities, document_uses_activation_shortcut,
     },
     typing::{
         CompileWarning, CompletionReason, EngineUpdate, PreviewOperation, SeededRandom,
@@ -241,7 +241,7 @@ fn connect_interactions(app: &AppWindow) {
     let last_tick = Rc::new(RefCell::new(Instant::now()));
     let native = Rc::new(RefCell::new(NativeRunState::default()));
 
-    app.set_real_typing_available(ForegroundBackend::available());
+    apply_platform_capabilities(app, current_capabilities());
     app.set_real_typing_selected(false);
     app.set_real_typing_confirmed(false);
     app.set_target_name("No target captured".into());
@@ -260,27 +260,56 @@ fn connect_interactions(app: &AppWindow) {
     let weak_app = app.as_weak();
     app.on_request_real_typing(move || {
         if let Some(app) = weak_app.upgrade() {
-            if app.get_real_typing_available() {
-                app.set_real_typing_confirm_open(true);
-            } else {
-                show_error(
-                    &app,
-                    "Real Typing is currently available on Windows only. Simulation remains available.",
+            let report = current_capabilities();
+            apply_platform_capabilities(&app, report);
+            app.set_real_typing_confirm_open(true);
+            app.set_notice_is_error(!report.real_typing_available);
+            if report.real_typing_available {
+                app.set_notice_text(
+                    "Review the platform capability notice before enabling Real Typing.".into(),
                 );
+            } else {
+                app.set_notice_text(report.guidance.into());
             }
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_refresh_platform_capabilities(move || {
+        if let Some(app) = weak_app.upgrade() {
+            let report = current_capabilities();
+            apply_platform_capabilities(&app, report);
+            app.set_real_typing_confirm_open(true);
+            app.set_notice_is_error(!report.real_typing_available);
+            app.set_notice_text(
+                if report.real_typing_available {
+                    "Platform capability re-checked. Review the notice, then enable Real Typing only if you accept its verification level."
+                } else {
+                    report.guidance
+                }
+                .into(),
+            );
         }
     });
 
     let weak_app = app.as_weak();
     app.on_confirm_real_typing(move || {
         if let Some(app) = weak_app.upgrade() {
+            let report = current_capabilities();
+            apply_platform_capabilities(&app, report);
+            if !report.real_typing_available {
+                app.set_real_typing_confirm_open(true);
+                show_error(&app, report.guidance);
+                return;
+            }
             app.set_real_typing_confirm_open(false);
             app.set_real_typing_confirmed(true);
             app.set_real_typing_selected(true);
             app.set_notice_is_error(false);
             app.set_notice_text(
                 format!(
-                    "Real Typing is armed. Focus the destination app and press {} to start; press it again or Escape to stop.",
+                    "Real Typing is armed for {}. Focus the destination app and press {} to start; press it again or Escape to stop.",
+                    report.badge,
                     app.get_shortcut_text()
                 )
                 .into(),
@@ -302,7 +331,7 @@ fn connect_interactions(app: &AppWindow) {
             app.set_notice_is_error(false);
             app.set_notice_text(
                 format!(
-                    "Focus the exact destination window, then press {}. AutoQuill will capture it and begin after a 2-second countdown.",
+                    "Focus the exact destination application, then press {}. AutoQuill will capture and validate it before a 2-second countdown.",
                     app.get_shortcut_text()
                 )
                 .into(),
@@ -633,6 +662,14 @@ fn connect_interactions(app: &AppWindow) {
 }
 
 fn connect_hotkey(app: &AppWindow) {
+    if !current_capabilities().global_shortcuts_available {
+        app.set_hotkey_ready(false);
+        app.set_hotkey_status("GLOBAL KEY UNAVAILABLE".into());
+        app.on_shortcut_changed(|_| {});
+        app.on_shortcut_recorded(|_, _, _, _, _| {});
+        return;
+    }
+
     match HotkeyService::start(shortcut_from_ui(app)) {
         Ok((service, receiver)) => {
             let service = Rc::new(service);
@@ -765,12 +802,29 @@ fn connect_hotkey(app: &AppWindow) {
         Err(error) => {
             app.set_hotkey_ready(false);
             app.set_hotkey_status("GLOBAL KEY UNAVAILABLE".into());
-            if ForegroundBackend::available() {
+            if current_capabilities().global_shortcuts_available {
                 show_error(app, &error.to_string());
             }
             app.on_shortcut_changed(|_| {});
             app.on_shortcut_recorded(|_, _, _, _, _| {});
         }
+    }
+}
+
+fn apply_platform_capabilities(app: &AppWindow, report: CapabilityReport) {
+    app.set_real_typing_available(report.real_typing_available);
+    app.set_platform_status(report.badge.into());
+    app.set_platform_summary(report.summary.into());
+    app.set_platform_guidance(report.guidance.into());
+    app.set_platform_footer(report.footer.into());
+    app.set_native_behavior_verified(report.verification == VerificationLevel::VerifiedBeta);
+    app.set_sticky_typing_supported(report.sticky_background_available);
+    if !report.sticky_background_available {
+        app.set_sticky_typing(false);
+    }
+    if !report.real_typing_available {
+        app.set_real_typing_selected(false);
+        app.set_real_typing_confirmed(false);
     }
 }
 
@@ -1550,7 +1604,9 @@ fn apply_loaded_profile(
 
 fn apply_settings_to_ui(app: &AppWindow, settings: &TypingSettings) {
     app.set_shortcut_text(settings.shortcut.to_string().into());
-    app.set_sticky_typing(settings.target == TargetIntent::StickyAuto);
+    app.set_sticky_typing(
+        app.get_sticky_typing_supported() && settings.target == TargetIntent::StickyAuto,
+    );
     app.set_wpm(i32::from(settings.wpm.get()));
     app.set_startup_delay_enabled(settings.startup_delay_enabled);
     app.set_stop_after_enabled(settings.stop_after.enabled);

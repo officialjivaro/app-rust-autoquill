@@ -91,6 +91,40 @@ fn real_typing_mode_and_confirmation_accept_pointer_input() {
 }
 
 #[test]
+fn unavailable_native_backend_opens_guidance_and_rechecks_without_enabling() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
+    app.set_real_typing_available(false);
+    app.set_platform_status("LINUX WAYLAND • SIMULATION ONLY".into());
+    app.set_platform_summary("Permission-mediated input is unavailable.".into());
+    app.set_platform_guidance("Continue with Simulation.".into());
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::ZERO);
+
+    let requested = Rc::new(RefCell::new(false));
+    let requested_from_callback = Rc::clone(&requested);
+    app.on_request_real_typing(move || *requested_from_callback.borrow_mut() = true);
+    ElementHandle::find_by_accessible_label(&app, "REAL TYPING • INFO")
+        .next()
+        .expect("unavailable Real Typing guidance should remain clickable")
+        .invoke_accessible_default_action();
+    assert!(*requested.borrow());
+
+    let rechecked = Rc::new(RefCell::new(false));
+    let rechecked_from_callback = Rc::clone(&rechecked);
+    app.on_refresh_platform_capabilities(move || *rechecked_from_callback.borrow_mut() = true);
+    app.set_real_typing_confirm_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    ElementHandle::find_by_accessible_label(&app, "RE-CHECK")
+        .next()
+        .expect("permission guidance should expose a Re-check action")
+        .invoke_accessible_default_action();
+    assert!(*rechecked.borrow());
+    assert!(!app.get_real_typing_selected());
+}
+
+#[test]
 fn minimum_size_keeps_the_stacked_workspace_and_drawer_accessible() {
     init_no_event_loop();
     let app = AppWindow::new().expect("testing backend should create the window");

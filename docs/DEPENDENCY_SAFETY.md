@@ -29,3 +29,15 @@ desktop-portal backend. The cross-platform lockfile adds `rfd` and the Linux-onl
 `rfd` has a small build script that validates the selected Linux backend and requests AppKit
 linking on macOS; inspection confirmed that it performs no network or executable-download work.
 Re-run the dependency-tree and locked cross-platform CI checks before changing this pin.
+
+## 2026-08-24 compile-only platform input dependencies
+
+The macOS and Linux X11 source backends pin `enigo 0.6.1` and `global-hotkey 0.8.0` in target-specific
+dependency sections, so the verified Windows dependency graph and executable do not include them.
+Linux enables only Enigo's X11 backend; no Wayland/libei feature is enabled. The Linux target also
+pins `x11rb 0.13.2`, while macOS pins only the `objc2-app-kit 0.3.2` features needed to identify the
+frontmost application. Default features remain disabled where the selected crate permits it.
+
+The selected input and shortcut crates are compile-only experiments until native hardware tests
+cover permissions, event-loop behavior, target loss, Unicode, special keys, and shortcut conflicts.
+Re-run locked native platform builds and review feature trees before changing these pins.

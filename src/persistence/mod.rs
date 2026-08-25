@@ -5,7 +5,9 @@ mod format;
 mod paths;
 mod store;
 
-pub use format::{Preferences, ProfileStatus, WindowPreferences};
+pub use format::{
+    AppearancePreferences, Preferences, ProfileStatus, ThemePreference, WindowPreferences,
+};
 pub use paths::DataPaths;
 pub use store::{
     ImportCandidate, ImportConflictPolicy, ImportReport, ProfileStore, ProfileSummary, StoreError,

@@ -81,7 +81,7 @@ impl ForegroundBackend {
         require_x11()?;
         let active = self
             .with_reader(X11TargetReader::active_target)
-            .map_err(|_| NativeInputError::TargetClosed)?;
+            .map_err(classify_validation_error)?;
         if active.window as usize != target.platform_handle()
             || active.process_id != target.platform_process_id()
         {
@@ -253,4 +253,28 @@ fn x11_error(error: impl fmt::Display) -> NativeInputError {
     NativeInputError::InputFailed(format!(
         "The X11 capability check failed ({error}). Simulation remains available."
     ))
+}
+
+fn classify_validation_error(error: NativeInputError) -> NativeInputError {
+    match error {
+        NativeInputError::NoTarget => NativeInputError::TargetClosed,
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_missing_active_window_is_classified_as_closed() {
+        assert_eq!(
+            classify_validation_error(NativeInputError::NoTarget),
+            NativeInputError::TargetClosed
+        );
+        assert!(matches!(
+            classify_validation_error(NativeInputError::InputFailed("display lost".into())),
+            NativeInputError::InputFailed(message) if message == "display lost"
+        ));
+    }
 }

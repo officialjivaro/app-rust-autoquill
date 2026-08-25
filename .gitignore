@@ -5,3 +5,7 @@
 *.pdb
 *.dSYM/
 *.log
+/artifacts/
+/dist/platform-builds/
+/dist/builds/*
+!/dist/builds/README.md

@@ -21,7 +21,7 @@ pub enum CapabilityState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerificationLevel {
     VerifiedBeta,
-    CompileOnly,
+    LogicalOnly,
     Unavailable,
 }
 
@@ -57,38 +57,38 @@ pub const fn report_for(platform: PlatformKind, permission_granted: bool) -> Cap
         PlatformKind::MacOs if permission_granted => CapabilityReport {
             platform,
             state: CapabilityState::Unverified,
-            verification: VerificationLevel::CompileOnly,
+            verification: VerificationLevel::LogicalOnly,
             real_typing_available: true,
             global_shortcuts_available: true,
             sticky_background_available: false,
-            badge: "macOS • COMPILE-ONLY EXPERIMENT",
-            summary: "Accessibility is granted. Foreground typing is experimental and has not been tested on Mac hardware.",
+            badge: "macOS • UNVERIFIED PREVIEW",
+            summary: "Accessibility is granted. Foreground typing passed logical and native-runner checks but has not been tested on Mac hardware.",
             guidance: "Use only in a disposable document. AutoQuill validates the foreground application and stops if it changes. Sticky Background is unavailable on macOS.",
-            footer: "macOS source compiles in CI • native behavior is not hardware-verified.",
+            footer: "macOS package is unsigned and not hardware-verified.",
         },
         PlatformKind::MacOs => CapabilityReport {
             platform,
             state: CapabilityState::PermissionRequired,
-            verification: VerificationLevel::CompileOnly,
+            verification: VerificationLevel::LogicalOnly,
             real_typing_available: false,
             global_shortcuts_available: true,
             sticky_background_available: false,
             badge: "macOS • ACCESSIBILITY REQUIRED",
             summary: "Real Typing needs Accessibility permission before native input can be armed.",
-            guidance: "Open System Settings → Privacy & Security → Accessibility, enable AutoQuill, return here, and press Re-check. This build is compile-only and still requires native Mac testing.",
-            footer: "Simulation remains available • macOS permission and input need hardware testing.",
+            guidance: "Open System Settings → Privacy & Security → Accessibility, enable AutoQuill, return here, and press Re-check. This unsigned preview still requires native Mac hardware testing.",
+            footer: "Simulation remains available • macOS permission and input are not hardware-verified.",
         },
         PlatformKind::LinuxX11 => CapabilityReport {
             platform,
             state: CapabilityState::Unverified,
-            verification: VerificationLevel::CompileOnly,
+            verification: VerificationLevel::LogicalOnly,
             real_typing_available: true,
             global_shortcuts_available: true,
             sticky_background_available: false,
-            badge: "LINUX X11 • COMPILE-ONLY EXPERIMENT",
-            summary: "Foreground X11 input and shortcuts are present but have not been tested on a Linux desktop.",
+            badge: "LINUX X11 • UNVERIFIED PREVIEW",
+            summary: "Foreground X11 input and shortcuts passed logical and native-runner checks but have not been tested on a physical Linux desktop.",
             guidance: "Use only in a disposable document. AutoQuill validates the active X11 window and stops if it changes. Sticky Background is unavailable.",
-            footer: "Linux X11 source compiles in CI • native behavior is not desktop-verified.",
+            footer: "Linux X11 package is experimental and not desktop-verified.",
         },
         PlatformKind::LinuxWayland => CapabilityReport {
             platform,
@@ -111,7 +111,7 @@ pub const fn report_for(platform: PlatformKind, permission_granted: bool) -> Cap
             sticky_background_available: false,
             badge: "LINUX SESSION • NOT DETECTED",
             summary: "AutoQuill could not confirm an X11 desktop session.",
-            guidance: "Continue with Simulation. Start AutoQuill inside a native X11 desktop session to expose the compile-only X11 experiment.",
+            guidance: "Continue with Simulation. Start AutoQuill inside a native X11 desktop session to expose the unverified X11 preview.",
             footer: "Linux display session unknown • Simulation remains safe.",
         },
         PlatformKind::Unsupported => CapabilityReport {
@@ -172,8 +172,8 @@ mod tests {
         let x11 = report_for(PlatformKind::LinuxX11, true);
 
         assert_eq!(windows.verification, VerificationLevel::VerifiedBeta);
-        assert_eq!(mac.verification, VerificationLevel::CompileOnly);
-        assert_eq!(x11.verification, VerificationLevel::CompileOnly);
+        assert_eq!(mac.verification, VerificationLevel::LogicalOnly);
+        assert_eq!(x11.verification, VerificationLevel::LogicalOnly);
         assert!(!mac.sticky_background_available);
         assert!(!x11.sticky_background_available);
     }

@@ -37,6 +37,34 @@ pub struct Preferences {
     pub default_profile: Option<String>,
     pub imported_profiles: Vec<String>,
     pub window: WindowPreferences,
+    pub appearance: AppearancePreferences,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemePreference {
+    Light,
+    Dark,
+    #[default]
+    System,
+}
+
+impl ThemePreference {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::System => "system",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AppearancePreferences {
+    pub theme: ThemePreference,
+    pub reduce_motion: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,11 +90,12 @@ impl Default for WindowPreferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            schema_version: 2,
+            schema_version: 3,
             last_profile: None,
             default_profile: None,
             imported_profiles: Vec::new(),
             window: WindowPreferences::default(),
+            appearance: AppearancePreferences::default(),
         }
     }
 }
@@ -368,5 +397,20 @@ mod tests {
         .unwrap();
         assert_eq!(preferences.last_profile.as_deref(), Some("Daily"));
         assert_eq!(preferences.window, WindowPreferences::default());
+        assert_eq!(preferences.appearance, AppearancePreferences::default());
+    }
+
+    #[test]
+    fn appearance_preferences_round_trip_without_affecting_profiles() {
+        let preferences = Preferences {
+            appearance: AppearancePreferences {
+                theme: ThemePreference::Light,
+                reduce_motion: true,
+            },
+            ..Preferences::default()
+        };
+        let bytes = serde_json::to_vec(&preferences).unwrap();
+        let restored: Preferences = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored.appearance, preferences.appearance);
     }
 }

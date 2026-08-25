@@ -1,4 +1,4 @@
-import { AboutSlint, CheckBox, LineEdit, ListView, ScrollView, SpinBox } from "std-widgets.slint";
+import { AboutSlint, CheckBox, LineEdit, ListView, Palette, ScrollView, SpinBox } from "std-widgets.slint";
 import { JivaroButton, JivaroTextEditor, TokenChip } from "controls.slint";
 import { JivaroTheme, MetaLabel, StatusDot } from "theme.slint";
 
@@ -104,8 +104,13 @@ export component AppWindow inherits Window {
     in-out property <string> notice-text: "Simulation mode is safe: no keystrokes leave this window.";
     in-out property <bool> notice-is-error: false;
     in-out property <bool> advanced-open: false;
+    in-out property <bool> appearance-settings-expanded: true;
     in-out property <bool> session-settings-expanded: true;
     in-out property <bool> humanize-settings-expanded: true;
+    in-out property <string> theme-mode: "system";
+    in-out property <bool> reduce-motion: false;
+    in-out property <ColorScheme> palette-color-scheme <=> Palette.color-scheme;
+    in-out property <bool> theme-reduce-motion <=> JivaroTheme.reduce-motion;
     in-out property <bool> real-typing-selected: false;
     in-out property <bool> real-typing-available: false;
     in-out property <bool> real-typing-confirmed: false;
@@ -196,6 +201,9 @@ export component AppWindow inherits Window {
     callback dialog-secondary();
     callback dialog-tertiary();
     callback reset-window();
+    callback appearance-edited(string, bool);
+    callback copy-diagnostics();
+    callback export-diagnostics();
 
     changed wpm => { root.settings-edited(); }
     changed shortcut-text => { root.settings-edited(); root.shortcut-changed(root.shortcut-text); }
@@ -221,6 +229,14 @@ export component AppWindow inherits Window {
     changed pause-max-characters => { root.settings-edited(); }
     changed pause-min-milliseconds => { root.settings-edited(); }
     changed pause-max-milliseconds => { root.settings-edited(); }
+    changed theme-mode => {
+        root.palette-color-scheme = root.theme-mode == "dark" ? ColorScheme.dark : (root.theme-mode == "light" ? ColorScheme.light : ColorScheme.unknown);
+        root.appearance-edited(root.theme-mode, root.reduce-motion);
+    }
+    changed reduce-motion => {
+        root.theme-reduce-motion = root.reduce-motion;
+        root.appearance-edited(root.theme-mode, root.reduce-motion);
+    }
 
     public function place-editor-caret(offset: int) {
         editor.set-selection-offsets(offset, offset);
@@ -284,7 +300,7 @@ export component AppWindow inherits Window {
                 width: 42px;
                 height: 42px;
                 border-radius: 12px;
-                background: JivaroTheme.text-primary;
+                background: transparent;
                 border-width: 1px;
                 border-color: JivaroTheme.border-strong;
 
@@ -629,7 +645,7 @@ export component AppWindow inherits Window {
                             height: parent.height;
                             border-radius: parent.border-radius;
                             background: JivaroTheme.accent;
-                            animate width { duration: 100ms; easing: ease-out; }
+                            animate width { duration: root.reduce-motion ? 0ms : 100ms; easing: ease-out; }
                         }
                     }
 
@@ -773,7 +789,7 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         spacing: 2px;
                         Text {
-                            text: "SESSION SETTINGS";
+                            text: "PREFERENCES";
                             color: JivaroTheme.text-primary;
                             font-family: "Inter";
                             font-size: 20px;
@@ -802,12 +818,131 @@ export component AppWindow inherits Window {
                     horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
                     vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
                     viewport-width: self.visible-width;
-                    viewport-height: (root.session-settings-expanded ? 430px : 50px) + (root.humanize-settings-expanded ? 430px : 50px) + 12px;
+                    viewport-height: (root.appearance-settings-expanded ? 242px : 50px) + (root.session-settings-expanded ? 430px : 50px) + (root.humanize-settings-expanded ? 430px : 50px) + 24px;
 
                     settings-content := VerticalLayout {
                         width: settings-scroll.visible-width;
                         height: settings-scroll.viewport-height;
                         spacing: 12px;
+
+                        appearance-settings := Rectangle {
+                            min-height: root.appearance-settings-expanded ? 242px : 50px;
+                            max-height: self.min-height;
+                            border-radius: 12px;
+                            background: JivaroTheme.background;
+                            border-width: 1px;
+                            border-color: root.appearance-settings-expanded ? JivaroTheme.border-strong : JivaroTheme.border;
+
+                            HorizontalLayout {
+                                x: 14px;
+                                y: 0;
+                                width: parent.width - 28px;
+                                height: 50px;
+                                alignment: center;
+                                spacing: 8px;
+
+                                MetaLabel { text: "APPEARANCE + SUPPORT"; }
+                                Rectangle { horizontal-stretch: 1; background: transparent; }
+                                Text {
+                                    text: root.appearance-settings-expanded ? "−" : "+";
+                                    color: JivaroTheme.text-primary;
+                                    font-family: "Inter";
+                                    font-size: 20px;
+                                    font-weight: 700;
+                                }
+                            }
+                            appearance-header-focus := FocusScope {
+                                width: parent.width;
+                                height: 50px;
+                                accessible-role: AccessibleRole.button;
+                                accessible-label: "Appearance and support";
+                                accessible-action-default => {
+                                    root.appearance-settings-expanded = !root.appearance-settings-expanded;
+                                }
+                                key-pressed(event) => {
+                                    if (event.text == " " || event.text == "\n") {
+                                        root.appearance-settings-expanded = !root.appearance-settings-expanded;
+                                        return accept;
+                                    }
+                                    return reject;
+                                }
+                            }
+                            TouchArea {
+                                height: 50px;
+                                clicked => {
+                                    appearance-header-focus.focus();
+                                    root.appearance-settings-expanded = !root.appearance-settings-expanded;
+                                }
+                            }
+
+                            if root.appearance-settings-expanded: VerticalLayout {
+                                x: 14px;
+                                y: 56px;
+                                width: parent.width - 28px;
+                                height: parent.height - 70px;
+                                spacing: 9px;
+
+                                Text {
+                                    text: "System follows your desktop. Diagnostics never include typed or clipboard content.";
+                                    color: JivaroTheme.text-muted;
+                                    font-family: "Inter";
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    min-height: 38px;
+                                    max-height: 38px;
+                                    spacing: 7px;
+                                    JivaroButton {
+                                        horizontal-stretch: 1;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: "SYSTEM";
+                                        primary: root.theme-mode == "system";
+                                        clicked => { root.theme-mode = "system"; }
+                                    }
+                                    JivaroButton {
+                                        horizontal-stretch: 1;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: "DARK";
+                                        primary: root.theme-mode == "dark";
+                                        clicked => { root.theme-mode = "dark"; }
+                                    }
+                                    JivaroButton {
+                                        horizontal-stretch: 1;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: "LIGHT";
+                                        primary: root.theme-mode == "light";
+                                        clicked => { root.theme-mode = "light"; }
+                                    }
+                                }
+                                CheckBox {
+                                    text: "Reduce interface motion";
+                                    checked <=> root.reduce-motion;
+                                }
+                                HorizontalLayout {
+                                    min-height: 38px;
+                                    max-height: 38px;
+                                    spacing: 7px;
+                                    JivaroButton {
+                                        horizontal-stretch: 1;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: "COPY DIAGNOSTICS";
+                                        clicked => { root.copy-diagnostics(); }
+                                    }
+                                    JivaroButton {
+                                        horizontal-stretch: 1;
+                                        min-height: 36px;
+                                        max-height: 36px;
+                                        label: "EXPORT DIAGNOSTICS";
+                                        clicked => { root.export-diagnostics(); }
+                                    }
+                                }
+                            }
+                        }
 
                         session-settings := Rectangle {
                             min-height: root.session-settings-expanded ? 430px : 50px;
@@ -835,9 +970,28 @@ export component AppWindow inherits Window {
                                     font-weight: 700;
                                 }
                             }
+                            session-header-focus := FocusScope {
+                                width: parent.width;
+                                height: 50px;
+                                accessible-role: AccessibleRole.button;
+                                accessible-label: "Timing and session settings";
+                                accessible-action-default => {
+                                    root.session-settings-expanded = !root.session-settings-expanded;
+                                }
+                                key-pressed(event) => {
+                                    if (event.text == " " || event.text == "\n") {
+                                        root.session-settings-expanded = !root.session-settings-expanded;
+                                        return accept;
+                                    }
+                                    return reject;
+                                }
+                            }
                             TouchArea {
                                 height: 50px;
-                                clicked => { root.session-settings-expanded = !root.session-settings-expanded; }
+                                clicked => {
+                                    session-header-focus.focus();
+                                    root.session-settings-expanded = !root.session-settings-expanded;
+                                }
                             }
 
                             if root.session-settings-expanded: VerticalLayout {
@@ -962,9 +1116,28 @@ export component AppWindow inherits Window {
                                     font-weight: 700;
                                 }
                             }
+                            humanize-header-focus := FocusScope {
+                                width: parent.width;
+                                height: 50px;
+                                accessible-role: AccessibleRole.button;
+                                accessible-label: "Natural variation settings";
+                                accessible-action-default => {
+                                    root.humanize-settings-expanded = !root.humanize-settings-expanded;
+                                }
+                                key-pressed(event) => {
+                                    if (event.text == " " || event.text == "\n") {
+                                        root.humanize-settings-expanded = !root.humanize-settings-expanded;
+                                        return accept;
+                                    }
+                                    return reject;
+                                }
+                            }
                             TouchArea {
                                 height: 50px;
-                                clicked => { root.humanize-settings-expanded = !root.humanize-settings-expanded; }
+                                clicked => {
+                                    humanize-header-focus.focus();
+                                    root.humanize-settings-expanded = !root.humanize-settings-expanded;
+                                }
                             }
 
                             if root.humanize-settings-expanded: VerticalLayout {
@@ -1309,7 +1482,7 @@ export component AppWindow inherits Window {
                         y: 9px;
                         width: parent.width - 24px;
                         height: parent.height - 18px;
-                        text: root.native-behavior-verified ? "Before starting: preview the document, place the destination cursor carefully, and close sensitive fields. Press " + root.shortcut-text + " again or press Escape to stop immediately." : "COMPILE-ONLY EXPERIMENT: native behavior has not been tested on this operating system. Use only in a disposable document. Do not use sensitive fields or important data.";
+                        text: root.native-behavior-verified ? "Before starting: preview the document, place the destination cursor carefully, and close sensitive fields. Press " + root.shortcut-text + " again or press Escape to stop immediately." : "UNVERIFIED EXPERIMENT: logical and native-runner checks cannot prove real desktop input behavior. Use only in a disposable document. Do not use sensitive fields or important data.";
                         color: JivaroTheme.text-secondary;
                         font-family: "Inter";
                         font-size: 11px;
@@ -1410,4 +1583,31 @@ export component AppWindow inherits Window {
         }
     }
 }
+}
+
+export component AutoQuillTray inherits SystemTrayIcon {
+    callback show-window();
+    callback toggle-session();
+    callback quit-application();
+
+    icon: @image-url("../assets/icon.png");
+    tooltip: "AutoQuill — Start / Stop typing";
+    title: "";
+    clicked => { root.show-window(); }
+
+    Menu {
+        MenuItem {
+            title: "Show AutoQuill";
+            activated => { root.show-window(); }
+        }
+        MenuItem {
+            title: "Start / Stop AutoQuill";
+            activated => { root.toggle-session(); }
+        }
+        MenuSeparator { }
+        MenuItem {
+            title: "Exit AutoQuill";
+            activated => { root.quit-application(); }
+        }
+    }
 }

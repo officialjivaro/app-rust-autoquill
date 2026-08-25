@@ -179,3 +179,38 @@ fn numpad_key(number: u8) -> Option<Key> {
         _ => return None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn common_document_keys_have_portable_mappings() {
+        assert!(matches!(special_key(SpecialKey::Enter), Some(Key::Return)));
+        assert!(matches!(special_key(SpecialKey::Tab), Some(Key::Tab)));
+        assert!(matches!(
+            special_key(SpecialKey::Backspace),
+            Some(Key::Backspace)
+        ));
+        assert!(matches!(
+            special_key(SpecialKey::Left),
+            Some(Key::LeftArrow)
+        ));
+        assert!(matches!(
+            special_key(SpecialKey::Right),
+            Some(Key::RightArrow)
+        ));
+    }
+
+    #[test]
+    fn mapping_refuses_out_of_range_function_and_numpad_keys() {
+        assert!(function_key(0).is_none());
+        assert!(function_key(13).is_none());
+        assert!(numpad_key(10).is_none());
+    }
+
+    #[test]
+    fn applications_menu_key_is_refused_instead_of_guessed() {
+        assert!(special_key(SpecialKey::Applications).is_none());
+    }
+}

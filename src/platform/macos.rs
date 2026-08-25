@@ -13,13 +13,14 @@ use super::{ForegroundTarget, NativeInputError, portable_input::NativeKeyboard};
 
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
-    fn AXIsProcessTrusted() -> bool;
+    // Apple declares this as the one-byte Carbon `Boolean`, not C99 `_Bool`.
+    fn AXIsProcessTrusted() -> u8;
 }
 
 #[must_use]
 pub(super) fn accessibility_permission_granted() -> bool {
     // SAFETY: AXIsProcessTrusted takes no pointers and only queries the current process's TCC state.
-    unsafe { AXIsProcessTrusted() }
+    unsafe { AXIsProcessTrusted() != 0 }
 }
 
 #[derive(Default)]

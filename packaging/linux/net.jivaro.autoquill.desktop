@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=AutoQuill
+Comment=Compact automatic typing assistant
+Exec=autoquill
+Icon=net.jivaro.autoquill
+Terminal=false
+Categories=Utility;Office;
+StartupNotify=true
+StartupWMClass=AutoQuill

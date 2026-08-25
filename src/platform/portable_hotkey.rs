@@ -372,3 +372,41 @@ fn character_code(character: char) -> Result<(Code, bool), NativeInputError> {
     };
     Ok(mapping)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn function_shortcuts_and_modified_characters_are_supported() {
+        let function = Shortcut::new(ModifierSet::default(), ShortcutKey::Function(12)).unwrap();
+        assert!(native_hotkey(function).is_ok());
+
+        let modified = Shortcut::new(
+            ModifierSet {
+                control: true,
+                shift: true,
+                ..ModifierSet::default()
+            },
+            ShortcutKey::Character('Q'),
+        )
+        .unwrap();
+        assert!(native_hotkey(modified).is_ok());
+    }
+
+    #[test]
+    fn bare_typing_keys_and_non_portable_characters_are_refused() {
+        let bare = Shortcut::new(ModifierSet::default(), ShortcutKey::Character('Q')).unwrap();
+        assert!(native_hotkey(bare).is_err());
+
+        let unicode = Shortcut::new(
+            ModifierSet {
+                control: true,
+                ..ModifierSet::default()
+            },
+            ShortcutKey::Character('é'),
+        )
+        .unwrap();
+        assert!(native_hotkey(unicode).is_err());
+    }
+}

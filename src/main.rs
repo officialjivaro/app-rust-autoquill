@@ -2,6 +2,7 @@
 
 use std::{
     cell::RefCell,
+    fs,
     path::PathBuf,
     rc::Rc,
     time::{Duration, Instant},
@@ -9,14 +10,15 @@ use std::{
 
 use autoquill::{
     APP_VERSION,
+    diagnostics::privacy_safe_report,
     domain::{
         ModifierSet, Profile, SessionState, SettingsDraft, Shortcut, ShortcutKey, TargetIntent,
         TypingSettings,
     },
     initialize_diagnostics,
     persistence::{
-        ImportCandidate, ImportConflictPolicy, ProfileStatus, ProfileStore, ProfileSummary,
-        WindowPreferences,
+        AppearancePreferences, ImportCandidate, ImportConflictPolicy, ProfileStatus, ProfileStore,
+        ProfileSummary, ThemePreference, WindowPreferences,
     },
     platform::{
         CapabilityReport, DeliveryStrategy, ForegroundBackend, ForegroundTarget, HotkeyEvent,
@@ -28,6 +30,7 @@ use autoquill::{
     },
     window_title,
 };
+use copypasta::{ClipboardContext, ClipboardProvider};
 use slint::{
     CloseRequestResponse, ComponentHandle, LogicalSize, ModelRc, PhysicalPosition, PhysicalSize,
     VecModel, platform::Key,
@@ -100,8 +103,12 @@ fn main() -> Result<(), slint::PlatformError> {
     restore_window_preferences(&app);
     connect_interactions(&app);
     connect_profiles(&app);
+    connect_appearance_and_diagnostics(&app);
 
-    if std::env::var_os("AUTOQUILL_SMOKE_TEST").is_some() {
+    let smoke_test = std::env::var_os("AUTOQUILL_SMOKE_TEST").is_some();
+    let tray = (!smoke_test).then(|| connect_tray(&app)).flatten();
+
+    if smoke_test {
         let smoke_text = "Hi[ENTER]";
         app.set_draft_text(smoke_text.into());
         app.set_wpm(200);
@@ -116,7 +123,18 @@ fn main() -> Result<(), slint::PlatformError> {
         assert_eq!(app.get_preview_text().as_str(), "Hi‹ENTER›");
         Ok(())
     } else {
-        app.run()
+        app.show()?;
+        if let Some(tray_instance) = &tray
+            && let Err(error) = tray_instance.show()
+        {
+            let _ = tray_instance.hide();
+            app.set_notice_is_error(true);
+            app.set_notice_text(
+                format!("The system tray is unavailable ({error}). Closing the window will exit AutoQuill.")
+                    .into(),
+            );
+        }
+        slint::run_event_loop()
     }
 }
 
@@ -127,6 +145,8 @@ fn restore_window_preferences(app: &AppWindow) {
     let Ok(preferences) = store.load_preferences() else {
         return;
     };
+    app.set_theme_mode(preferences.appearance.theme.as_str().into());
+    app.set_reduce_motion(preferences.appearance.reduce_motion);
     let width = preferences
         .window
         .width
@@ -158,7 +178,7 @@ fn save_window_preferences(app: &AppWindow, store: &ProfileStore) {
     let logical_size = window.size().to_logical(scale_factor);
     let width = logical_size.width.round() as u32;
     let height = logical_size.height.round() as u32;
-    preferences.schema_version = 2;
+    preferences.schema_version = 3;
     preferences.window = WindowPreferences {
         width: width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
         height: height.clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT),
@@ -172,6 +192,157 @@ fn save_window_preferences(app: &AppWindow, store: &ProfileStore) {
         preferences.window.y = Some(position.y);
     }
     let _ = store.save_preferences(&preferences);
+}
+
+fn connect_appearance_and_diagnostics(app: &AppWindow) {
+    let weak_app = app.as_weak();
+    app.on_appearance_edited(move |theme, reduce_motion| {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        let Ok(store) = ProfileStore::discover() else {
+            show_error(
+                &app,
+                "Appearance preferences could not locate the AutoQuill data folder.",
+            );
+            return;
+        };
+        let Ok(mut preferences) = store.load_preferences() else {
+            show_error(&app, "Appearance preferences could not be loaded.");
+            return;
+        };
+        preferences.schema_version = 3;
+        preferences.appearance = AppearancePreferences {
+            theme: theme_preference(theme.as_str()),
+            reduce_motion,
+        };
+        if let Err(error) = store.save_preferences(&preferences) {
+            show_error(
+                &app,
+                &format!("Appearance preferences could not be saved: {error}"),
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_copy_diagnostics(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        let report = privacy_safe_report(
+            current_capabilities(),
+            app.get_theme_mode().as_str(),
+            app.get_reduce_motion(),
+        );
+        match ClipboardContext::new().and_then(|mut clipboard| clipboard.set_contents(report)) {
+            Ok(()) => {
+                app.set_notice_is_error(false);
+                app.set_notice_text(
+                    "Privacy-safe diagnostics copied. Typed text and clipboard contents were excluded."
+                        .into(),
+                );
+            }
+            Err(error) => show_error(&app, &format!("Diagnostics could not be copied: {error}")),
+        }
+    });
+
+    let weak_app = app.as_weak();
+    app.on_export_diagnostics(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        let Some(destination) = rfd::FileDialog::new()
+            .set_title("Export privacy-safe AutoQuill diagnostics")
+            .set_file_name(format!("AutoQuill-{APP_VERSION}-diagnostics.txt"))
+            .save_file()
+        else {
+            return;
+        };
+        let report = privacy_safe_report(
+            current_capabilities(),
+            app.get_theme_mode().as_str(),
+            app.get_reduce_motion(),
+        );
+        match fs::write(destination, report) {
+            Ok(()) => {
+                app.set_notice_is_error(false);
+                app.set_notice_text(
+                    "Privacy-safe diagnostics exported without typed text or clipboard contents."
+                        .into(),
+                );
+            }
+            Err(error) => show_error(&app, &format!("Diagnostics could not be exported: {error}")),
+        }
+    });
+}
+
+fn theme_preference(value: &str) -> ThemePreference {
+    match value {
+        "light" => ThemePreference::Light,
+        "dark" => ThemePreference::Dark,
+        _ => ThemePreference::System,
+    }
+}
+
+fn connect_tray(app: &AppWindow) -> Option<AutoQuillTray> {
+    let tray = match AutoQuillTray::new() {
+        Ok(tray) => tray,
+        Err(error) => {
+            app.set_notice_is_error(true);
+            app.set_notice_text(
+                format!("The system tray could not start ({error}). AutoQuill remains fully usable from this window.")
+                    .into(),
+            );
+            return None;
+        }
+    };
+
+    let weak_app = app.as_weak();
+    tray.on_show_window(move || {
+        if let Some(app) = weak_app.upgrade() {
+            let _ = app.show();
+        }
+    });
+
+    let weak_app = app.as_weak();
+    tray.on_toggle_session(move || {
+        let Some(app) = weak_app.upgrade() else {
+            return;
+        };
+        if app.get_session_active() {
+            app.invoke_stop_simulation();
+        } else if app.get_real_typing_selected() {
+            let _ = app.show();
+            app.invoke_real_start_help();
+        } else if app.get_can_start() {
+            app.invoke_start_simulation();
+        } else {
+            let _ = app.show();
+            show_error(
+                &app,
+                "Add valid text before starting AutoQuill from the tray.",
+            );
+        }
+    });
+
+    let weak_app = app.as_weak();
+    let weak_tray = tray.as_weak();
+    tray.on_quit_application(move || {
+        if let Some(app) = weak_app.upgrade() {
+            if app.get_session_active() {
+                app.invoke_stop_simulation();
+            }
+            if let Ok(store) = ProfileStore::discover() {
+                save_window_preferences(&app, &store);
+            }
+        }
+        if let Some(tray) = weak_tray.upgrade() {
+            let _ = tray.hide();
+        }
+        let _ = slint::quit_event_loop();
+    });
+
+    Some(tray)
 }
 
 fn reset_window(app: &AppWindow, store: &ProfileStore) {

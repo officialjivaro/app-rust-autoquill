@@ -7,27 +7,37 @@ on:
       - ".github/workflows/ci.yml"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "DEPENDENCY_LICENSES.md"
       - "rust-toolchain.toml"
       - "build.rs"
       - "assets/**"
+      - "packaging/**"
+      - "scripts/package-*"
+      - "scripts/generate-license-inventory.ps1"
       - "src/**"
       - "tests/**"
+      - "THIRD_PARTY_NOTICES.md"
       - "ui/**"
   pull_request:
     paths:
       - ".github/workflows/ci.yml"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "DEPENDENCY_LICENSES.md"
       - "rust-toolchain.toml"
       - "build.rs"
       - "assets/**"
+      - "packaging/**"
+      - "scripts/package-*"
+      - "scripts/generate-license-inventory.ps1"
       - "src/**"
       - "tests/**"
+      - "THIRD_PARTY_NOTICES.md"
       - "ui/**"
   workflow_dispatch:
     inputs:
       platform_builds:
-        description: "Compile macOS ARM/Intel and Linux release targets"
+        description: "Produce Windows, Universal 2 macOS, and Linux release packages"
         required: false
         default: false
         type: boolean
@@ -52,12 +62,38 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
       - name: Lint
-        run: cargo clippy --all-targets --no-default-features --features renderer-software -- -D warnings
+        run: cargo clippy --locked --all-targets --no-default-features --features renderer-software -- -D warnings
+      - name: Verify dependency license inventory
+        shell: pwsh
+        run: |
+          ./scripts/generate-license-inventory.ps1
+          git diff --exit-code -- DEPENDENCY_LICENSES.md
       - name: Test
-        run: cargo test --no-default-features --features renderer-software
+        run: cargo test --locked --no-default-features --features renderer-software
+      - name: Build Windows release package
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.platform_builds) ||
+          (github.event_name == 'push' && contains(github.event.head_commit.message, '[platform ci]'))
+        shell: pwsh
+        run: |
+          $env:RUSTFLAGS = "--remap-path-prefix=$env:USERPROFILE=<USERPROFILE>"
+          cargo build --profile release-size --locked --no-default-features --features renderer-software
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          $version = ($metadata.packages | Where-Object name -eq 'autoquill').version
+          ./scripts/package-windows.ps1 -Version $version -OutputDirectory artifacts/windows
+      - name: Upload Windows package
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.platform_builds) ||
+          (github.event_name == 'push' && contains(github.event.head_commit.message, '[platform ci]'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoquill-windows-x64
+          path: artifacts/windows/
+          if-no-files-found: error
+          retention-days: 14
 
   platform-build:
-    name: Compile only / ${{ matrix.os }}
+    name: Logical QC and package / ${{ matrix.os }}
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.platform_builds) ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[platform ci]'))
@@ -73,12 +109,37 @@ jobs:
           toolchain: 1.97.1
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libwayland-dev libxkbcommon-dev
-      - name: Build native size-focused release
-        run: cargo build --profile release-size --locked --no-default-features --features renderer-software
-      - name: Add Intel macOS target
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libwayland-dev libxkbcommon-dev openbox xvfb
+      - name: Run native platform tests
+        run: cargo test --locked --no-default-features --features renderer-software
+      - name: Add both macOS architecture targets
         if: runner.os == 'macOS'
-        run: rustup target add x86_64-apple-darwin
-      - name: Type-check Intel macOS target
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build both macOS architecture releases
         if: runner.os == 'macOS'
-        run: cargo check --locked --target x86_64-apple-darwin --no-default-features --features renderer-software
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=${HOME}=<USERPROFILE>"
+          cargo build --profile release-size --locked --target aarch64-apple-darwin --no-default-features --features renderer-software
+          cargo build --profile release-size --locked --target x86_64-apple-darwin --no-default-features --features renderer-software
+      - name: Package unsigned Universal 2 macOS preview
+        if: runner.os == 'macOS'
+        run: |
+          version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(package["version"] for package in json.load(sys.stdin)["packages"] if package["name"] == "autoquill"))')"
+          bash scripts/package-macos.sh "$version" artifacts/macos
+      - name: Build Linux size-focused release
+        if: runner.os == 'Linux'
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=${HOME}=<USERPROFILE>"
+          cargo build --profile release-size --locked --no-default-features --features renderer-software
+      - name: Package Linux raw and AppImage previews under Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(package["version"] for package in json.load(sys.stdin)["packages"] if package["name"] == "autoquill"))')"
+          xvfb-run -a bash scripts/package-linux.sh "$version" artifacts/linux
+      - name: Upload platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoquill-${{ runner.os }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14

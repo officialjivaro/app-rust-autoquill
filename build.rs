@@ -7,7 +7,7 @@ fn main() {
     }
 
     let mut config = slint_build::CompilerConfiguration::new()
-        .with_style("fluent-dark".into())
+        .with_style("fluent".into())
         .embed_resources(slint_build::EmbedResourcesKind::EmbedFiles);
 
     // Element metadata makes UI tests stable and accessibility-aware, but release executables do
@@ -29,8 +29,8 @@ fn compile_windows_resources() {
     let mut resource = winresource::WindowsResource::new();
     resource
         .set_icon("assets/icon.ico")
-        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0011_0000_0001)
-        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0011_0000_0001);
+        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0012_0000_0001)
+        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0012_0000_0001);
     resource
         .compile()
         .expect("failed to compile Windows icon and version resources");

@@ -1,6 +1,7 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Phase 3 compile-only macOS/Linux backend package implemented; native hardware gates remain
+Status: Phase 4 cross-platform release-candidate package in progress; macOS/Linux native hardware
+gates remain permanently unverified
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -405,20 +406,20 @@ clean-machine/trust pass remains in release hardening before a stable release.
 
 The `0.17.0-beta.1` compile package adds target-specific macOS and Linux X11 foreground-input and
 shortcut backends, runtime X11/Wayland detection, macOS Accessibility re-check guidance, and safe
-Wayland refusal. These source backends remain compile-only experiments until their native hardware
-matrices pass; only the Windows executable is published in `/dist`.
+Wayland refusal. These source backends are produced only as prominently labeled unverified
+previews; only the Windows executable retains the Verified Beta capability label.
 
 Gate: every published platform completes onboarding and a real session, with unavailable capabilities explained before Start.
 
 ### Phase 4 — Release hardening
 
-- [ ] Finish Dark, Light, and System themes, tray behavior, accessibility, scaling, reduced motion, and usability passes.
-- [ ] Embed final icons, metadata, licenses, and version information.
-- [ ] Produce Windows portable EXE/optional installer, macOS app/DMG, and Linux raw/AppImage artifacts.
+- [x] Finish Dark, Light, and System themes, tray behavior, accessibility, scaling, reduced motion, and automated usability checks. Physical macOS/Linux passes remain unavailable.
+- [x] Embed final icons, metadata, licenses, and version information.
+- [x] Produce Windows portable EXE, unsigned macOS app/DMG, and Linux raw/AppImage artifacts through the opt-in package workflow.
 - [ ] Add signing and notarization when credentials are available.
-- [ ] Publish checksums, manifests, dependency licenses, and size reports.
+- [x] Produce checksums, manifests, dependency licenses, and size reports with each build set.
 - [ ] Connect asynchronous GitHub Release checks and user-initiated downloads.
-- [ ] Add privacy-safe diagnostics with Copy and Export actions.
+- [x] Add privacy-safe diagnostics with Copy and Export actions.
 - [ ] Run antivirus, clean-machine, migration, upgrade, permission, and uninstall checks.
 
 Gate: reproducible release artifacts pass all advertised platform and clean-machine checks.
@@ -512,3 +513,8 @@ The next milestone is native Phase 3 validation and permission hardening:
 - 2026-08-24: macOS and Linux X11 source backends are compile-only experiments until native
   permission, input, shortcut, editor, and browser matrices pass. Wayland stays Simulation-only
   until consent-based portal/libei behavior can be tested on supported compositors.
+- 2026-08-25: Because physical macOS/Linux hardware will not be available, packages may be produced
+  only as unverified previews after logical/native-runner QC. The app, documentation, and artifact
+  manifests must disclose this boundary; Wayland remains Simulation-only.
+- 2026-08-25: Completed local build sets are versioned under `dist/builds` and the newest three are
+  retained without committing historical binaries to Git.

@@ -191,6 +191,43 @@ fn shortcut_recorder_accepts_pointer_and_modifier_keyboard_input() {
     );
 }
 
+#[test]
+fn appearance_and_privacy_diagnostic_controls_are_keyboard_accessible() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(960, 600));
+    app.set_advanced_open(true);
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::from_millis(150));
+
+    ElementHandle::find_by_accessible_label(&app, "LIGHT")
+        .next()
+        .expect("Light theme should be exposed to accessibility")
+        .invoke_accessible_default_action();
+    assert_eq!(app.get_theme_mode().as_str(), "light");
+
+    ElementHandle::find_by_accessible_label(&app, "Reduce interface motion")
+        .next()
+        .expect("Reduced motion should be exposed to accessibility")
+        .invoke_accessible_default_action();
+    assert!(app.get_reduce_motion());
+
+    let copied = Rc::new(RefCell::new(false));
+    let copied_from_callback = Rc::clone(&copied);
+    app.on_copy_diagnostics(move || *copied_from_callback.borrow_mut() = true);
+    ElementHandle::find_by_accessible_label(&app, "COPY DIAGNOSTICS")
+        .next()
+        .expect("Copy Diagnostics should be exposed to accessibility")
+        .invoke_accessible_default_action();
+    assert!(*copied.borrow());
+
+    ElementHandle::find_by_accessible_label(&app, "Appearance and support")
+        .next()
+        .expect("Settings section headers should be exposed as buttons")
+        .invoke_accessible_default_action();
+    assert!(!app.get_appearance_settings_expanded());
+}
+
 fn scan_for_click(
     app: &AppWindow,
     result: &Rc<RefCell<bool>>,

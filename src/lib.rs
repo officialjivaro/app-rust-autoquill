@@ -3,6 +3,7 @@
 //! The crate is deliberately small in Phase 0. Typing behavior will be added behind portable
 //! interfaces so that the UI and platform integrations remain separate.
 
+pub mod diagnostics;
 pub mod domain;
 pub mod persistence;
 pub mod platform;

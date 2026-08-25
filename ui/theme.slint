@@ -1,24 +1,30 @@
+import { Palette } from "std-widgets.slint";
+
 export global JivaroTheme {
-    in property <color> background: #0d0f11;
-    in property <color> surface: #15181b;
-    in property <color> surface-raised: #1d2125;
-    in property <color> surface-hover: #282d32;
-    in property <color> border: #2d3237;
-    in property <color> border-strong: #454b51;
-    in property <color> text-primary: #f2f3f1;
-    in property <color> text-secondary: #c8cbcb;
-    in property <color> text-muted: #a7adb3;
-    in property <color> text-disabled: #7a8289;
-    in property <color> accent: #d87341;
-    in property <color> accent-hover: #e58452;
-    in property <color> accent-pressed: #bd5c31;
-    in property <color> accent-soft: #4a2b20;
-    in property <color> success: #68b989;
-    in property <color> success-soft: #1d392b;
-    in property <color> warning: #e7b35f;
-    in property <color> warning-soft: #3e321d;
-    in property <color> danger: #e47c73;
-    in property <color> danger-soft: #432521;
+    out property <bool> light-mode: Palette.color-scheme == ColorScheme.light;
+    in-out property <bool> reduce-motion: false;
+
+    in property <color> background: self.light-mode ? #f5f2ed : #0d0f11;
+    in property <color> surface: self.light-mode ? #fffdfa : #15181b;
+    in property <color> surface-raised: self.light-mode ? #ebe6df : #1d2125;
+    in property <color> surface-hover: self.light-mode ? #e1dad1 : #282d32;
+    in property <color> border: self.light-mode ? #d1c9bf : #2d3237;
+    in property <color> border-strong: self.light-mode ? #9f958a : #454b51;
+    in property <color> text-primary: self.light-mode ? #181b1e : #f2f3f1;
+    in property <color> text-secondary: self.light-mode ? #3e454a : #c8cbcb;
+    in property <color> text-muted: self.light-mode ? #5c646a : #a7adb3;
+    in property <color> text-disabled: self.light-mode ? #7b8388 : #7a8289;
+    in property <color> accent: self.light-mode ? #b94f22 : #d87341;
+    in property <color> accent-hover: self.light-mode ? #a9431c : #e58452;
+    in property <color> accent-pressed: self.light-mode ? #913817 : #bd5c31;
+    in property <color> accent-soft: self.light-mode ? #f3d8ca : #4a2b20;
+    in property <color> on-accent: #fffaf4;
+    in property <color> success: self.light-mode ? #28766c : #68b989;
+    in property <color> success-soft: self.light-mode ? #d8eee8 : #1d392b;
+    in property <color> warning: self.light-mode ? #9b6818 : #e7b35f;
+    in property <color> warning-soft: self.light-mode ? #f5e8c9 : #3e321d;
+    in property <color> danger: self.light-mode ? #b4453d : #e47c73;
+    in property <color> danger-soft: self.light-mode ? #f4d8d5 : #432521;
 }
 
 export component MetaLabel inherits Text {

@@ -44,11 +44,11 @@ export component JivaroButton inherits Rectangle {
         }
     ]
 
-    animate background, border-color, opacity { duration: 120ms; }
+    animate background, border-color, opacity { duration: JivaroTheme.reduce-motion ? 0ms : 120ms; }
 
     label := Text {
         text: root.label;
-        color: root.primary ? JivaroTheme.background : JivaroTheme.text-primary;
+        color: root.primary ? JivaroTheme.on-accent : JivaroTheme.text-primary;
         font-family: "Inter";
         font-size: 12px;
         font-weight: 750;
@@ -139,7 +139,7 @@ export component JivaroTextEditor inherits Rectangle {
         }
     ]
 
-    animate border-color, opacity { duration: 120ms; }
+    animate border-color, opacity { duration: JivaroTheme.reduce-motion ? 0ms : 120ms; }
 
     editor-scroll := ScrollView {
         x: 14px;

@@ -3,12 +3,14 @@
 AutoQuill is being ported from Python/PySide6 to a compact Rust + Slint desktop application.
 The current source includes a branded, interactive editor, a safe simulation preview, and an
 explicitly armed Windows Real Typing beta backed by the same portable compiler and session engine.
-Compile-gated macOS and Linux X11 backends now share that engine while reporting their unverified
-status and operating-system limitations directly in the UI.
+Logically validated macOS and Linux X11 preview backends now share that engine while reporting
+their unverified status and operating-system limitations directly in the UI.
 Sticky Auto safely selects native background delivery or protected foreground delivery before a
 run begins. The responsive interface opens at 1280×720, scales freely down to a usable 960×600
 minimum, and converts from an editor-first two-column workspace to a scrollable stacked layout at
-narrow widths. The Windows reliability matrix covers Notepad, Edge, Chrome, target loss, and
+narrow widths. Dark, Light, and System themes, reduced motion, privacy-safe diagnostics, a modern
+cross-platform icon, and best-effort tray controls are included. The Windows reliability matrix
+covers Notepad, Edge, Chrome, target loss, and
 global-shortcut stress. Start/Stop, Pause/Resume, Reset, startup delay, active-time limits, loops,
 breaks, short pauses, and visible simulated corrections are functional. Profiles keep the draft
 and every setting together, including deliberate legacy import and recoverable upgrades.
@@ -48,15 +50,17 @@ Platform support is deliberately capability-based:
 | Platform | Real Typing | Global shortcut | Sticky Auto | Verification |
 |---|---|---|---|---|
 | Windows x64 | Available | Available | Compatible controls | Verified beta |
-| macOS Apple Silicon/Intel | Accessibility permission required | Compile-only experiment | Unavailable | Compile-only |
-| Linux X11 x64 | Compile-only experiment | Compile-only experiment | Unavailable | Compile-only |
+| macOS Universal 2 | Accessibility permission required | Unverified preview | Unavailable | Logical/native-runner QC only |
+| Linux X11 x64 | Unverified preview | Unverified preview | Unavailable | Logical/Xvfb/native-runner QC only |
 | Linux Wayland | Simulation only | Unavailable | Unavailable | Portal work deferred |
 
-The macOS and Linux source backends are not published or hardware-certified yet. macOS re-checks
+The macOS and Linux packages are produced as explicitly unverified previews. The macOS bundle is
+unsigned and unnotarized, so Gatekeeper may require a deliberate user override. macOS re-checks
 Accessibility permission before enabling Real Typing. Linux detects X11 versus Wayland at runtime;
 Wayland refuses unrestricted synthetic input and keeps Simulation available rather than claiming
 support that the compositor may prohibit. See
-[docs/PHASE3_COMPILE_ONLY_PACKAGE.md](docs/PHASE3_COMPILE_ONLY_PACKAGE.md) for the exact test boundary.
+[docs/PHASE4_RELEASE_CANDIDATE.md](docs/PHASE4_RELEASE_CANDIDATE.md) for the exact logical-QC and
+packaging boundary.
 
 ## Profiles
 
@@ -72,8 +76,9 @@ AutoQuill uses the same cross-platform location as the original app:
 ```
 
 On Windows, `~` is `C:\Users\<username>`. Preferences are separate at
-`Data/preferences.json`; they also remember the last usable window size and position. Use **Reset
-Window** in the settings drawer to return to a centered 1280×720 window. Legacy profiles stay
+`Data/preferences.json`; they also remember the appearance, reduced-motion choice, and last usable
+window size and position. Use **Reset Window** in the settings drawer to return to a centered
+1280×720 window. Legacy profiles stay
 byte-for-byte unchanged until you explicitly save and approve an upgrade; the original bytes are
 backed up under `Data/Backups`. Deleted profiles move to `Data/Trash`.
 
@@ -87,6 +92,8 @@ backed up under `Data/Backups`. Deleted profiles move to `Data/Trash`.
 - Narrow windows stack the editor above the run panel and provide vertical scrolling instead of
   clipping controls.
 - Escape closes the topmost settings drawer, profile manager, confirmation, or dialog.
+- The tray provides Show, Start/Stop, and Exit when the desktop exposes a compatible tray host.
+- Copy/Export Diagnostics omits typed text, clipboard contents, profile names, and injected keys.
 
 ## Prerequisites
 
@@ -136,8 +143,19 @@ For the FemtoVG comparison build:
 cargo build --profile release-size --locked --no-default-features --features renderer-femtovg
 ```
 
-The packaged raw executable embeds the Slint markup, image resources, Windows icon, and version
-metadata. Platform-specific bundles and installers will be added during release hardening.
+The packaging workflow produces a Windows x64 EXE, an unsigned Universal 2 macOS app/DMG, and a
+Linux x64 raw executable/AppImage. It runs only for a manual request or a commit containing
+`[platform ci]`; ordinary pushes retain the smaller Windows quality job. Packages, checksums, and
+manifests are retained as workflow artifacts for 14 days and downloaded locally to
+`dist/platform-builds` after a completed package run. This process does not create a public GitHub
+Release.
+
+Completed local build sets are archived under `dist/builds/<version>`. The archive script preserves
+the newest three versions without committing the binaries to Git:
+
+```text
+powershell -ExecutionPolicy Bypass -File scripts/archive-builds.ps1 -Version 0.18.0-beta.1 -SourcePath dist/platform-builds
+```
 
 See [docs/DEPENDENCY_SAFETY.md](docs/DEPENDENCY_SAFETY.md) for the locked dependency safeguard
 added after an unexpected build-script download attempt was observed during a clean rebuild.

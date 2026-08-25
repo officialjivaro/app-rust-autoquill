@@ -4,6 +4,7 @@ set -euo pipefail
 version="${1:?usage: package-linux.sh VERSION OUTPUT_DIRECTORY}"
 output_dir="${2:?usage: package-linux.sh VERSION OUTPUT_DIRECTORY}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+output_dir="$(realpath -m "$output_dir")"
 binary="$repo_root/target/release-size/autoquill"
 work_dir="$(mktemp -d)"
 app_dir="$work_dir/AutoQuill.AppDir"

@@ -405,8 +405,7 @@ mod tests {
                 ..ModifierSet::default()
             },
             ShortcutKey::Character('é'),
-        )
-        .unwrap();
-        assert!(native_hotkey(unicode).is_err());
+        );
+        assert!(unicode.is_err());
     }
 }

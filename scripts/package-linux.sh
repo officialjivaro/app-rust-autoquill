@@ -18,6 +18,13 @@ if grep -aFq "$HOME" "$binary"; then
   echo "The Linux release contains the runner home path; rebuild it with path remapping." >&2
   exit 1
 fi
+ldconfig_cache="$work_dir/ldconfig-cache.txt"
+ldconfig -p > "$ldconfig_cache"
+xkbcommon_x11="$(awk '$1 == "libxkbcommon-x11.so.0" { print $NF; exit }' "$ldconfig_cache")"
+if [[ -z "$xkbcommon_x11" || ! -r "$xkbcommon_x11" ]]; then
+  echo "libxkbcommon-x11.so.0 is required to validate and package the X11 release." >&2
+  exit 1
+fi
 mkdir -p "$output_dir" "$app_dir/usr/bin" "$app_dir/usr/share/doc/autoquill" "$tar_dir"
 cp "$repo_root/THIRD_PARTY_NOTICES.md" "$app_dir/usr/share/doc/autoquill/THIRD_PARTY_NOTICES.md"
 cp "$repo_root/DEPENDENCY_LICENSES.md" "$app_dir/usr/share/doc/autoquill/DEPENDENCY_LICENSES.md"
@@ -46,6 +53,7 @@ chmod 755 "$tool"
   "$tool" \
     --appdir "$app_dir" \
     --executable "$binary" \
+    --library "$xkbcommon_x11" \
     --desktop-file "$repo_root/packaging/linux/net.jivaro.autoquill.desktop" \
     --icon-file "$icon_file" \
     --output appimage
@@ -69,6 +77,8 @@ APPIMAGE_EXTRACT_AND_RUN=1 AUTOQUILL_SMOKE_TEST=1 "$appimage"
   "$appimage" --appimage-extract >/dev/null
   test -x squashfs-root/AppRun
   test -x squashfs-root/usr/bin/autoquill
+  bundled_xkbcommon="$(find squashfs-root/usr/lib -name 'libxkbcommon-x11.so*' -print -quit)"
+  test -n "$bundled_xkbcommon"
 )
 
 tarball="$output_dir/AutoQuill-${version}-linux-x64.tar.gz"

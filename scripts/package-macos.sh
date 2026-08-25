@@ -17,7 +17,7 @@ test -x "$intel_binary"
 mkdir -p "$output_dir" "$app/Contents/MacOS" "$app/Contents/Resources" "$iconset" "$dmg_root"
 
 lipo -create "$arm_binary" "$intel_binary" -output "$app/Contents/MacOS/AutoQuill"
-lipo -verify_arch aarch64 x86_64 "$app/Contents/MacOS/AutoQuill"
+lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/AutoQuill"
 if grep -aFq "$HOME" "$app/Contents/MacOS/AutoQuill"; then
   echo "The macOS release contains the runner home path; rebuild it with path remapping." >&2
   exit 1

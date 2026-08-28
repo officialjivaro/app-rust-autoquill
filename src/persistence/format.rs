@@ -38,6 +38,7 @@ pub struct Preferences {
     pub imported_profiles: Vec<String>,
     pub window: WindowPreferences,
     pub appearance: AppearancePreferences,
+    pub tray_close_notice_seen: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -96,6 +97,7 @@ impl Default for Preferences {
             imported_profiles: Vec::new(),
             window: WindowPreferences::default(),
             appearance: AppearancePreferences::default(),
+            tray_close_notice_seen: false,
         }
     }
 }
@@ -398,6 +400,7 @@ mod tests {
         assert_eq!(preferences.last_profile.as_deref(), Some("Daily"));
         assert_eq!(preferences.window, WindowPreferences::default());
         assert_eq!(preferences.appearance, AppearancePreferences::default());
+        assert!(!preferences.tray_close_notice_seen);
     }
 
     #[test]

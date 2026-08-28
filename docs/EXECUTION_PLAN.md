@@ -1,7 +1,7 @@
 # AutoQuill Rust Port — Consolidated Execution Plan
 
-Status: Phase 4 cross-platform release-candidate package in progress; native hardware gates remain open
-Last updated: 2026-08-25
+Status: Phase 4 release hardening in progress; the 0.19 UI reliability package is implemented and native hardware gates remain open
+Last updated: 2026-08-29
 Primary roadmap: [`../BUILD_PLAN.md`](../BUILD_PLAN.md)
 
 This document is the day-to-day build sequence for AutoQuill. It consolidates the six remaining
@@ -540,10 +540,12 @@ The next commits remain small even though the delivery phases are consolidated:
 - [x] `Add modifier shortcut recording and active-session emergency Escape`
 - [x] `Embed Windows icon/version resources and refresh the verified Phase 2C dist beta`
 - [x] `Add capability-aware compile-only macOS and Linux X11 backends`
+- [x] `Apply the 0.19 UI reliability, accessibility, modal-focus, and Windows acceptance package`
 - [ ] `Complete native macOS and Linux hardware matrices before publishing artifacts`
 
-The Windows feature package is locally complete. Clean-machine trust checks, tray behavior, signing,
-and installer work remain release-hardening tasks rather than blockers for Phase 3 platform work.
+The Windows feature package and 0.19 UI reliability pass are locally complete. Update delivery,
+clean-machine trust checks, signing, and installer work remain release-hardening tasks rather than
+blockers for the unverified macOS/Linux preview packages.
 
 ## 11. Plan maintenance
 

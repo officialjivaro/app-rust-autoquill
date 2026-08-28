@@ -228,6 +228,109 @@ fn appearance_and_privacy_diagnostic_controls_are_keyboard_accessible() {
     assert!(!app.get_appearance_settings_expanded());
 }
 
+#[test]
+fn editable_text_and_numeric_controls_expose_complete_accessibility_contracts() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::ZERO);
+
+    let editor = ElementHandle::find_by_accessible_label(&app, "Text to preview")
+        .next()
+        .expect("draft editor should be exposed as a named text input");
+    editor.set_accessible_value("Set through accessibility");
+    assert_eq!(app.get_draft_text().as_str(), "Set through accessibility");
+
+    app.set_preview_text("Read only".into());
+    let preview = ElementHandle::find_by_accessible_label(&app, "Simulation preview")
+        .next()
+        .expect("preview should be exposed as a named read-only text input");
+    preview.set_accessible_value("Must not replace preview");
+    assert_eq!(app.get_preview_text().as_str(), "Read only");
+
+    assert_named_control(&app, "Words per minute");
+    app.set_advanced_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    assert_named_control(&app, "Active seconds");
+    ElementHandle::find_by_accessible_label(&app, "Appearance and support")
+        .next()
+        .expect("Appearance section header should be visible")
+        .invoke_accessible_default_action();
+    mock_elapsed_time(Duration::from_millis(150));
+    for label in ["Wait seconds minimum", "Wait seconds maximum"] {
+        assert_named_control(&app, label);
+    }
+    ElementHandle::find_by_accessible_label(&app, "Timing and session settings")
+        .next()
+        .expect("Session section header should be visible")
+        .invoke_accessible_default_action();
+    mock_elapsed_time(Duration::from_millis(150));
+    for label in [
+        "Action interval minimum",
+        "Action interval maximum",
+        "Mistakes / event minimum",
+        "Mistakes / event maximum",
+        "Word interval minimum",
+        "Word interval maximum",
+        "Break ms minimum",
+        "Break ms maximum",
+        "Character interval minimum",
+        "Character interval maximum",
+        "Pause ms minimum",
+        "Pause ms maximum",
+    ] {
+        assert_named_control(&app, label);
+    }
+}
+
+#[test]
+fn modal_surfaces_focus_the_first_action_and_profiles_explain_empty_results() {
+    init_no_event_loop();
+    let app = AppWindow::new().expect("testing backend should create the window");
+    app.window().set_size(slint::PhysicalSize::new(1280, 720));
+    app.show().expect("testing backend should show the window");
+    mock_elapsed_time(Duration::ZERO);
+
+    app.set_advanced_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    send_keyboard_string_sequence(&app, " ");
+    assert!(
+        !app.get_advanced_open(),
+        "Settings should focus its Done action when opened"
+    );
+
+    app.set_profile_manager_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    assert_named_control(&app, "Search profiles");
+    assert_named_control(&app, "NO PROFILES YET");
+    send_keyboard_string_sequence(&app, "draft");
+    assert_eq!(app.get_profile_search().as_str(), "draft");
+    assert_named_control(&app, "NO MATCHING PROFILES");
+
+    app.set_dialog_input_visible(true);
+    let dialog_primary = Rc::new(RefCell::new(false));
+    let dialog_primary_from_callback = Rc::clone(&dialog_primary);
+    app.on_dialog_primary(move || *dialog_primary_from_callback.borrow_mut() = true);
+    app.set_dialog_open(true);
+    mock_elapsed_time(Duration::from_millis(150));
+    assert_named_control(&app, "Profile name");
+    send_keyboard_string_sequence(&app, " ");
+    assert!(
+        *dialog_primary.borrow(),
+        "The dialog should focus its primary action when opened"
+    );
+}
+
+fn assert_named_control(app: &AppWindow, label: &str) {
+    assert!(
+        ElementHandle::find_by_accessible_label(app, label)
+            .next()
+            .is_some(),
+        "{label} should be exposed with an accessibility label"
+    );
+}
+
 fn scan_for_click(
     app: &AppWindow,
     result: &Rc<RefCell<bool>>,

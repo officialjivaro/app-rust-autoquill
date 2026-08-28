@@ -1,7 +1,7 @@
 # Distribution artifacts
 
 `AutoQuill-windows-x64.exe` is the unsigned portable Windows x64 release-candidate beta
-(`0.18.0-beta.1`).
+(`0.19.0-beta.1`).
 
 This build includes safe Simulation, explicitly confirmed Real Typing, Sticky Auto for verified
 native edit controls, automatic Foreground Protected fallback for browsers/unknown controls and
@@ -10,6 +10,10 @@ Escape, transactional conflict fallback, strict target validation, the modern Ji
 Dark/Light/System themes, reduced motion, privacy-safe diagnostics, tray controls, embedded Windows
 metadata, Unicode and special-key input, schema-v2 profiles, and the responsive 1280×720 interface.
 Simulation is selected every launch.
+
+The 0.19 UI reliability pass also includes clipped narrow-layout scrolling, modal focus containment,
+complete numeric/input accessibility names, a writable editor UI Automation ValuePattern, corrected
+dark-theme primary-button contrast, guided empty profile results, and one-time close-to-tray guidance.
 
 The opt-in native-runner workflow also produces an unsigned Universal 2 macOS app/DMG and Linux
 x64 raw/AppImage previews. After the run, those unverified packages are downloaded into the local

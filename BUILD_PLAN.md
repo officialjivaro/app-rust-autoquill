@@ -1,7 +1,7 @@
 # AutoQuill Rust Port — Build Plan
 
-Status: Phase 4 cross-platform release-candidate package in progress; macOS/Linux native hardware
-gates remain permanently unverified
+Status: Phase 4 release hardening in progress; the 0.19 UI reliability package is implemented,
+while macOS/Linux native hardware gates remain permanently unverified
 Source application: `python_autoquill` v0.13
 Target application: `rust_autoquill`
 Primary stack: Rust + Slint
@@ -413,7 +413,7 @@ Gate: every published platform completes onboarding and a real session, with una
 
 ### Phase 4 — Release hardening
 
-- [x] Finish Dark, Light, and System themes, tray behavior, accessibility, scaling, reduced motion, and automated usability checks. Physical macOS/Linux passes remain unavailable.
+- [x] Finish Dark, Light, and System themes, tray behavior, accessibility, scaling, reduced motion, and automated usability checks. The 0.19 pass adds modal focus containment, complete field labels, editor ValuePattern support, narrow-layout clipping, contrast correction, profile empty-state guidance, and repeatable Windows UI Automation acceptance. Physical macOS/Linux passes remain unavailable.
 - [x] Embed final icons, metadata, licenses, and version information.
 - [x] Produce Windows portable EXE, unsigned macOS app/DMG, and Linux raw/AppImage artifacts through the opt-in package workflow.
 - [ ] Add signing and notarization when credentials are available.

@@ -121,6 +121,16 @@ cargo test --test windows_compatibility_matrix -- --ignored --nocapture --test-t
 See [docs/PHASE2C_WINDOWS_COMPLETION.md](docs/PHASE2C_WINDOWS_COMPLETION.md) for Sticky Auto,
 shortcut, Escape, metadata, matrix, and release evidence.
 
+The repeatable Windows UI Automation acceptance pass checks editable text, accessible numeric
+labels, modal focus containment, and the profile search/empty state against a built executable:
+
+```text
+powershell -ExecutionPolicy Bypass -File scripts/windows-ui-acceptance.ps1
+```
+
+See [docs/V019_UI_RELIABILITY.md](docs/V019_UI_RELIABILITY.md) for the 0.19 manual-audit findings,
+implemented corrections, and remaining platform verification limits.
+
 Development and test profiles disable debug-symbol and incremental caches to keep storage usage
 manageable. After preserving a verified release executable, remove Cargo artifacts with:
 
@@ -154,7 +164,7 @@ Completed local build sets are archived under `dist/builds/<version>`. The archi
 the newest three versions without committing the binaries to Git:
 
 ```text
-powershell -ExecutionPolicy Bypass -File scripts/archive-builds.ps1 -Version 0.18.0-beta.1 -SourcePath dist/platform-builds
+powershell -ExecutionPolicy Bypass -File scripts/archive-builds.ps1 -Version 0.19.0-beta.1 -SourcePath dist/platform-builds
 ```
 
 See [docs/DEPENDENCY_SAFETY.md](docs/DEPENDENCY_SAFETY.md) for the locked dependency safeguard

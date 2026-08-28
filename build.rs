@@ -29,8 +29,8 @@ fn compile_windows_resources() {
     let mut resource = winresource::WindowsResource::new();
     resource
         .set_icon("assets/icon.ico")
-        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0012_0000_0001)
-        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0012_0000_0001);
+        .set_version_info(VersionInfo::FILEVERSION, 0x0000_0013_0000_0001)
+        .set_version_info(VersionInfo::PRODUCTVERSION, 0x0000_0013_0000_0001);
     resource
         .compile()
         .expect("failed to compile Windows icon and version resources");

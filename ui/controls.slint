@@ -7,6 +7,9 @@ export component JivaroButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked;
 
+    public function take-focus() {
+        button-focus.focus();
+    }
     min-height: 40px;
     min-width: 92px;
     border-radius: 9px;
@@ -128,6 +131,12 @@ export component JivaroTextEditor inherits Rectangle {
     accessible-read-only: root.read-only;
     accessible-value: root.text;
     accessible-placeholder-text: root.placeholder-text;
+    accessible-action-set-value(value) => {
+        if (root.enabled && !root.read-only) {
+            root.text = value;
+            root.edited(value);
+        }
+    }
 
     states [
         focused when root.has-focus: {

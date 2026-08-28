@@ -124,15 +124,18 @@ fn main() -> Result<(), slint::PlatformError> {
         Ok(())
     } else {
         app.show()?;
-        if let Some(tray_instance) = &tray
-            && let Err(error) = tray_instance.show()
-        {
-            let _ = tray_instance.hide();
-            app.set_notice_is_error(true);
-            app.set_notice_text(
-                format!("The system tray is unavailable ({error}). Closing the window will exit AutoQuill.")
-                    .into(),
-            );
+        if let Some(tray_instance) = &tray {
+            match tray_instance.show() {
+                Ok(()) => show_tray_close_notice_once(&app),
+                Err(error) => {
+                    let _ = tray_instance.hide();
+                    app.set_notice_is_error(true);
+                    app.set_notice_text(
+                        format!("The system tray is unavailable ({error}). Closing the window will exit AutoQuill.")
+                            .into(),
+                    );
+                }
+            }
         }
         slint::run_event_loop()
     }
@@ -343,6 +346,26 @@ fn connect_tray(app: &AppWindow) -> Option<AutoQuillTray> {
     });
 
     Some(tray)
+}
+
+fn show_tray_close_notice_once(app: &AppWindow) {
+    let Ok(store) = ProfileStore::discover() else {
+        return;
+    };
+    let Ok(mut preferences) = store.load_preferences() else {
+        return;
+    };
+    if preferences.tray_close_notice_seen {
+        return;
+    }
+
+    app.set_notice_is_error(false);
+    app.set_notice_text(
+        "Closing the window keeps AutoQuill available in the system tray. Use Exit AutoQuill from the tray menu to quit."
+            .into(),
+    );
+    preferences.tray_close_notice_seen = true;
+    let _ = store.save_preferences(&preferences);
 }
 
 fn reset_window(app: &AppWindow, store: &ProfileStore) {

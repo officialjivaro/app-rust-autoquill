@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "versions": {
+    "0.17.0-beta.1": {
+      "date": "2026-08-24",
+      "title": "Cross-platform capability beta",
+      "summary": "Introduces capability-aware Windows, macOS, Linux X11, and Linux Wayland behavior while keeping unsupported input paths visibly disabled.",
+      "changes": [
+        "Added shared runtime capability reporting across supported desktop environments",
+        "Added macOS Accessibility permission checks and foreground-input support",
+        "Added Linux session detection and X11 foreground-input support",
+        "Kept Wayland in Simulation mode where unrestricted input is unavailable"
+      ],
+      "limitations": [
+        "Only the Windows x64 package was published for this build",
+        "The Windows executable is unsigned"
+      ]
+    },
+    "0.18.0-beta.1": {
+      "date": "2026-08-25",
+      "title": "Cross-platform packaging beta",
+      "summary": "Adds repeatable Windows, Linux, and Universal 2 macOS packaging with checksums, manifests, diagnostics, themes, and a refreshed AutoQuill identity.",
+      "changes": [
+        "Added Windows x64, Linux x64, and Universal 2 macOS packages",
+        "Added per-platform manifests and SHA-256 checksums",
+        "Added Dark, Light, and System themes with reduced-motion support",
+        "Added privacy-safe diagnostics and best-effort tray controls"
+      ],
+      "limitations": [
+        "macOS and Linux are unverified previews rather than physically tested releases",
+        "The macOS package is unsigned and unnotarized",
+        "Linux Real Typing is experimental on X11; Wayland remains Simulation-only"
+      ]
+    },
+    "0.19.0-beta.1": {
+      "date": "2026-08-29",
+      "title": "UI reliability beta",
+      "summary": "Improves responsive layout containment, keyboard focus, accessible controls, modal behavior, contrast, and repeatable Windows UI verification.",
+      "changes": [
+        "Prevented narrow layouts from painting over the fixed header",
+        "Contained keyboard focus within active modal surfaces",
+        "Added stable accessibility names and editable-value automation support",
+        "Improved dark-theme contrast and Windows UI acceptance coverage"
+      ],
+      "limitations": [
+        "All platform packages remain unsigned beta builds",
+        "macOS and Linux are unverified previews rather than physically tested releases",
+        "Linux Real Typing is experimental on X11; Wayland remains Simulation-only"
+      ]
+    }
+  }
+}

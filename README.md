@@ -167,6 +167,14 @@ the newest three versions without committing the binaries to Git:
 powershell -ExecutionPolicy Bypass -File scripts/archive-builds.ps1 -Version 0.19.0-beta.1 -SourcePath dist/platform-builds
 ```
 
+After archiving a verified build set, regenerate the checked-in release catalog. The catalog keeps
+the newest three semantic versions, including prereleases, records unavailable platforms as
+`coming-soon`, and verifies every advertised size and SHA-256 digest against the local archive:
+
+```text
+powershell -ExecutionPolicy Bypass -File scripts/generate-release-catalog.ps1
+```
+
 See [docs/DEPENDENCY_SAFETY.md](docs/DEPENDENCY_SAFETY.md) for the locked dependency safeguard
 added after an unexpected build-script download attempt was observed during a clean rebuild.
 

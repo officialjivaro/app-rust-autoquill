@@ -205,6 +205,7 @@ export component AppWindow inherits Window {
     callback dialog-secondary();
     callback dialog-tertiary();
     callback reset-window();
+    callback request-quit();
     callback appearance-edited(string, bool);
     callback copy-diagnostics();
     callback export-diagnostics();
@@ -244,6 +245,14 @@ export component AppWindow inherits Window {
     public function place-editor-caret(offset: int) {
         editor.set-selection-offsets(offset, offset);
         editor.request-editor-focus();
+    }
+    in-out property <string> dialog-error: "";
+    in-out property <string> overlay-notice: "";
+    public function restore-workspace-focus() {
+        if (!root.overlay-open) { editor.request-editor-focus(); }
+    }
+    changed real-typing-confirm-open => {
+        if (!root.real-typing-confirm-open && !root.overlay-open) { real-typing-button.take-focus(); }
     }
 
     title: root.window-title;
@@ -353,7 +362,7 @@ export component AppWindow inherits Window {
                 max-width: 160px;
                 min-height: 40px;
                 max-height: 40px;
-                label: (root.profile-modified ? "• " : "") + root.current-profile-name;
+                label: "PROFILES · " + (root.profile-modified ? "• " : "") + root.current-profile-name;
                 enabled: !root.session-active && !root.overlay-open;
                 clicked => { root.open-profile-manager(); }
             }
@@ -519,7 +528,7 @@ export component AppWindow inherits Window {
                             max-height: 36px;
                             label: "SETTINGS";
                             enabled: !root.session-active && !root.overlay-open;
-                            clicked => { root.advanced-open = true; }
+                            clicked => { root.overlay-notice = ""; root.advanced-open = true; }
                         }
                     }
                 }
@@ -775,7 +784,8 @@ export component AppWindow inherits Window {
     }
     }
 
-    if root.advanced-open && !root.profile-manager-open && !root.real-typing-confirm-open && !root.dialog-open: Rectangle {
+    if root.advanced-open: Rectangle {
+        visible: !root.profile-manager-open && !root.real-typing-confirm-open && !root.dialog-open;
         init => { settings-done-top.take-focus(); }
         x: 0;
         y: 0;
@@ -785,6 +795,11 @@ export component AppWindow inherits Window {
 
         TouchArea { clicked => { root.advanced-open = false; settings-launcher.take-focus(); } }
 
+        FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: !root.profile-manager-open && !root.real-typing-confirm-open && !root.dialog-open;
+        changed enabled => { if (self.enabled) { settings-done-top.take-focus(); } }
         settings-panel := Rectangle {
             width: min(root.width, 480px);
             height: root.height;
@@ -810,7 +825,7 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         spacing: 2px;
                         Text {
-                            text: "PREFERENCES";
+                            text: "SETTINGS";
                             color: JivaroTheme.text-primary;
                             font-family: "Inter";
                             font-size: 20px;
@@ -834,12 +849,20 @@ export component AppWindow inherits Window {
                     }
                 }
 
+                if root.overlay-notice != "": Text {
+                    text: root.overlay-notice;
+                    color: root.notice-is-error ? JivaroTheme.danger : JivaroTheme.text-secondary;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                    min-height: 38px;
+                    max-height: 38px;
+                }
                 settings-scroll := ScrollView {
                     vertical-stretch: 1;
                     horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
                     vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
                     viewport-width: self.visible-width;
-                    viewport-height: (root.appearance-settings-expanded ? 242px : 50px) + (root.session-settings-expanded ? 430px : 50px) + (root.humanize-settings-expanded ? 430px : 50px) + 24px;
+                    viewport-height: (root.appearance-settings-expanded ? 242px : 50px) + (root.session-settings-expanded ? 430px : 50px) + (root.humanize-settings-expanded ? 430px : 50px) + 250px;
 
                     settings-content := VerticalLayout {
                         width: settings-scroll.visible-width;
@@ -1232,6 +1255,34 @@ export component AppWindow inherits Window {
                                 }
                             }
                         }
+                        Rectangle {
+                            min-height: 214px;
+                            max-height: 214px;
+                            border-radius: 12px;
+                            background: JivaroTheme.background;
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+                                MetaLabel { text: "PLATFORM + TYPING SUPPORT"; }
+                                Text {
+                                    text: root.platform-status;
+                                    color: JivaroTheme.accent;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.platform-summary + " " + root.platform-guidance;
+                                    color: JivaroTheme.text-secondary;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                    vertical-stretch: 1;
+                                }
+                                JivaroButton {
+                                    label: "TYPING SETUP";
+                                    clicked => { root.request-real-typing(); }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1261,7 +1312,10 @@ export component AppWindow inherits Window {
         }
     }
 
-    if root.profile-manager-open && !root.real-typing-confirm-open && !root.dialog-open: Rectangle {
+    }
+
+    if root.profile-manager-open: Rectangle {
+        visible: !root.real-typing-confirm-open && !root.dialog-open;
         init => { profile-search-input.focus(); }
         x: 0;
         y: 0;
@@ -1271,6 +1325,11 @@ export component AppWindow inherits Window {
 
         TouchArea { clicked => { root.profile-manager-open = false; profile-launcher.take-focus(); } }
 
+        FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: !root.real-typing-confirm-open && !root.dialog-open;
+        changed enabled => { if (self.enabled) { profile-search-input.focus(); } }
         manager-panel := Rectangle {
             width: min(root.width - 40px, 880px);
             height: min(root.height - 40px, 610px);
@@ -1355,9 +1414,17 @@ export component AppWindow inherits Window {
                     }
                 }
 
+                if root.overlay-notice != "": Text {
+                    text: root.overlay-notice;
+                    color: root.notice-is-error ? JivaroTheme.danger : JivaroTheme.text-secondary;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                    min-height: 38px;
+                    max-height: 38px;
+                }
                 Rectangle {
                     vertical-stretch: 1;
-                    min-height: 250px;
+                    min-height: 200px;
                     border-radius: 12px;
                     background: JivaroTheme.background;
                     border-width: 1px;
@@ -1446,7 +1513,7 @@ export component AppWindow inherits Window {
                             accessible-label: self.text;
                         }
                         Text {
-                            text: root.profile-search == "" ? "Choose NEW to save this draft as a profile, or import existing AutoQuill JSON files when you are ready." : "Try a different search, clear the field, or import a profile file.";
+                            text: root.profile-search == "" ? "Choose SAVE AS to save your current draft. NEW starts a blank draft. Import Files or Import Folder brings in existing profiles." : "Try a different search, clear the field, or import a profile file.";
                             color: JivaroTheme.text-muted;
                             font-family: "Inter";
                             font-size: 11px;
@@ -1480,6 +1547,8 @@ export component AppWindow inherits Window {
         }
     }
 
+    }
+
     if root.real-typing-confirm-open && !root.dialog-open: Rectangle {
         init => { keep-simulation-button.take-focus(); }
         x: 0;
@@ -1490,8 +1559,7 @@ export component AppWindow inherits Window {
 
         confirm-panel := Rectangle {
             width: min(root.width - 48px, 560px);
-            min-height: 380px;
-            max-height: 380px;
+            height: 380px;
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
             border-radius: 18px;
@@ -1567,7 +1635,12 @@ export component AppWindow inherits Window {
     }
 
     if root.dialog-open: Rectangle {
-        init => { dialog-primary-button.take-focus(); }
+        property <bool> naming: root.dialog-input-visible;
+        changed naming => { if (self.naming) { dialog-name-input.focus(); } }
+        init => {
+            if (root.dialog-input-visible) { dialog-name-input.focus(); }
+            else { dialog-primary-button.take-focus(); }
+        }
         x: 0;
         y: 0;
         width: root.width;
@@ -1576,8 +1649,7 @@ export component AppWindow inherits Window {
 
         dialog-panel := Rectangle {
             width: min(root.width - 48px, 520px);
-            min-height: root.dialog-input-visible ? 252px : 220px;
-            max-height: self.min-height;
+            height: (root.dialog-input-visible ? 252px : 220px) + (root.dialog-error != "" ? 70px : 0px);
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
             border-radius: 17px;
@@ -1603,10 +1675,19 @@ export component AppWindow inherits Window {
                     wrap: word-wrap;
                     vertical-stretch: 1;
                 }
-                if root.dialog-input-visible: LineEdit {
+                dialog-name-input := LineEdit {
+                    visible: root.dialog-input-visible;
+                    height: root.dialog-input-visible ? 32px : 0px;
                     accessible-label: "Profile name";
                     text <=> root.dialog-input;
                     placeholder-text: "Profile name";
+                }
+                if root.dialog-error != "": Text {
+                    text: root.dialog-error;
+                    color: JivaroTheme.danger;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    min-height: 60px;
                 }
                 HorizontalLayout {
                     min-height: 38px;

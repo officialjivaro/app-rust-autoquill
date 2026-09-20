@@ -85,9 +85,9 @@ pub const fn report_for(platform: PlatformKind, permission_granted: bool) -> Cap
             real_typing_available: true,
             global_shortcuts_available: true,
             sticky_background_available: false,
-            badge: "LINUX X11 • UNVERIFIED PREVIEW",
-            summary: "Foreground X11 input and shortcuts passed logical and native-runner checks but have not been tested on a physical Linux desktop.",
-            guidance: "Use only in a disposable document. AutoQuill validates the active X11 window and stops if it changes. Sticky Background is unavailable.",
+            badge: "LINUX X11 • EXPERIMENTAL BETA",
+            summary: "Real Typing and Start/Stop shortcuts are available on X11. Physical Linux desktop testing is still pending.",
+            guidance: "Focus a disposable document and press your Start/Stop shortcut. Typing stops if the active window or focused X11 control changes. Background typing is unavailable. AppImage targets Ubuntu 22.04 or newer and compatible x64 systems.",
             footer: "Linux X11 package is experimental and not desktop-verified.",
         },
         PlatformKind::LinuxWayland => CapabilityReport {
@@ -98,8 +98,8 @@ pub const fn report_for(platform: PlatformKind, permission_granted: bool) -> Cap
             global_shortcuts_available: false,
             sticky_background_available: false,
             badge: "LINUX WAYLAND • SIMULATION ONLY",
-            summary: "This Wayland session requires permission-mediated portals that are not safely enabled in this build.",
-            guidance: "Continue with Simulation. Wayland Global Shortcuts and Remote Desktop/libei input remain disabled until they can be tested interactively on supported compositors.",
+            summary: "Simulation works here. Real Typing and global shortcuts are unavailable in a Wayland session.",
+            guidance: "For experimental Real Typing, save your work, sign out, and choose an X11 session (such as Ubuntu on Xorg) if your desktop offers one. Reopen AutoQuill there. Otherwise continue using Simulation.",
             footer: "Wayland detected • no unrestricted native input is attempted.",
         },
         PlatformKind::LinuxUnknown => CapabilityReport {
@@ -138,7 +138,9 @@ pub fn classify_linux_session(
     let session_type = session_type.unwrap_or_default().trim().to_ascii_lowercase();
     if session_type == "wayland" || wayland_display.is_some_and(|value| !value.trim().is_empty()) {
         PlatformKind::LinuxWayland
-    } else if session_type == "x11" || display.is_some_and(|value| !value.trim().is_empty()) {
+    } else if display.is_some_and(|value| !value.trim().is_empty())
+        && (session_type.is_empty() || session_type == "x11")
+    {
         PlatformKind::LinuxX11
     } else {
         PlatformKind::LinuxUnknown
@@ -193,5 +195,25 @@ mod tests {
         assert_eq!(report.verification, VerificationLevel::Unavailable);
         assert!(!report.real_typing_available);
         assert!(!report.global_shortcuts_available);
+    }
+
+    #[test]
+    fn missing_display_and_non_desktop_sessions_do_not_offer_x11_input() {
+        assert_eq!(
+            classify_linux_session(Some("x11"), None, None),
+            PlatformKind::LinuxUnknown
+        );
+        assert_eq!(
+            classify_linux_session(Some("tty"), Some(":0"), None),
+            PlatformKind::LinuxUnknown
+        );
+        assert_eq!(
+            classify_linux_session(None, Some(":0"), None),
+            PlatformKind::LinuxX11
+        );
+        assert_eq!(
+            classify_linux_session(Some("x11"), Some(":0"), Some("wayland-0")),
+            PlatformKind::LinuxWayland
+        );
     }
 }

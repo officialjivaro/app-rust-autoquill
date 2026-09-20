@@ -39,7 +39,7 @@ fn editor_pointer_keyboard_and_token_action_are_interactive() {
     let opened = Rc::new(RefCell::new(false));
     let opened_from_callback = Rc::clone(&opened);
     app.on_open_profile_manager(move || *opened_from_callback.borrow_mut() = true);
-    ElementHandle::find_by_accessible_label(&app, "Unsaved")
+    ElementHandle::find_by_accessible_label(&app, "PROFILES · Unsaved")
         .next()
         .expect("profile selector should be exposed to accessibility")
         .invoke_accessible_default_action();
@@ -315,10 +315,27 @@ fn modal_surfaces_focus_the_first_action_and_profiles_explain_empty_results() {
     app.set_dialog_open(true);
     mock_elapsed_time(Duration::from_millis(150));
     assert_named_control(&app, "Profile name");
-    send_keyboard_string_sequence(&app, " ");
+    send_keyboard_string_sequence(&app, "New name");
+    assert_eq!(app.get_dialog_input().as_str(), "New name");
     assert!(
-        *dialog_primary.borrow(),
-        "The dialog should focus its primary action when opened"
+        !*dialog_primary.borrow(),
+        "Naming a profile must not submit it"
+    );
+    assert_eq!(
+        app.get_profile_search().as_str(),
+        "draft",
+        "Nested dialog owns typing"
+    );
+    app.set_dialog_error("That name is already in use.".into());
+    mock_elapsed_time(Duration::ZERO);
+    assert_named_control(&app, "That name is already in use.");
+    app.set_dialog_open(false);
+    mock_elapsed_time(Duration::ZERO);
+    send_keyboard_string_sequence(&app, "s");
+    assert_eq!(
+        app.get_profile_search().as_str(),
+        "drafts",
+        "Cancel returns to Profiles"
     );
 }
 

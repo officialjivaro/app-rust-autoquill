@@ -102,6 +102,9 @@ fn main() -> Result<(), slint::PlatformError> {
     app.set_window_title(window_title().into());
     restore_window_preferences(&app);
     connect_interactions(&app);
+    app.on_request_quit(|| {
+        let _ = slint::quit_event_loop();
+    });
     connect_profiles(&app);
     connect_appearance_and_diagnostics(&app);
 
@@ -329,20 +332,14 @@ fn connect_tray(app: &AppWindow) -> Option<AutoQuillTray> {
     });
 
     let weak_app = app.as_weak();
-    let weak_tray = tray.as_weak();
     tray.on_quit_application(move || {
         if let Some(app) = weak_app.upgrade() {
             if app.get_session_active() {
                 app.invoke_stop_simulation();
             }
-            if let Ok(store) = ProfileStore::discover() {
-                save_window_preferences(&app, &store);
-            }
+            let _ = app.show();
+            app.invoke_request_quit();
         }
-        if let Some(tray) = weak_tray.upgrade() {
-            let _ = tray.hide();
-        }
-        let _ = slint::quit_event_loop();
     });
 
     Some(tray)
@@ -1128,6 +1125,7 @@ enum PendingAction {
     Load(String),
     New,
     Close,
+    Quit,
 }
 
 #[derive(Debug, Clone)]
@@ -1159,6 +1157,14 @@ fn connect_profiles(app: &AppWindow) {
             return;
         }
     };
+    connect_profiles_with_store(app, store);
+}
+
+fn selected_profile_name(controller: &Rc<RefCell<ProfileController>>) -> Option<String> {
+    controller.borrow().selected_name.clone()
+}
+
+fn connect_profiles_with_store(app: &AppWindow, store: ProfileStore) {
     let controller = Rc::new(RefCell::new(ProfileController {
         store,
         visible: Vec::new(),
@@ -1203,6 +1209,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_open_profile_manager(move || {
         if let Some(app) = weak_app.upgrade() {
+            app.set_overlay_notice("".into());
             update_dirty_state(&app, &state);
             refresh_profile_list(&app, &state);
             app.set_advanced_open(false);
@@ -1247,7 +1254,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_load(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
         {
             request_pending(&app, &state, PendingAction::Load(name));
         }
@@ -1281,7 +1288,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_rename(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
         {
             show_input_dialog(
                 &app,
@@ -1299,7 +1306,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_duplicate(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
         {
             show_input_dialog(
                 &app,
@@ -1317,7 +1324,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_delete(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
         {
             show_dialog(
                 &app,
@@ -1338,7 +1345,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_default(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
         {
             let result = state.borrow().store.set_default(Some(&name));
             match result {
@@ -1357,7 +1364,7 @@ fn connect_profiles(app: &AppWindow) {
     let state = Rc::clone(&controller);
     app.on_profile_export(move || {
         if let Some(app) = weak_app.upgrade()
-            && let Some(name) = state.borrow().selected_name.clone()
+            && let Some(name) = selected_profile_name(&state)
             && let Some(destination) = rfd::FileDialog::new()
                 .add_filter("AutoQuill profile", &["json"])
                 .set_file_name(format!("{name}.json"))
@@ -1372,6 +1379,14 @@ fn connect_profiles(app: &AppWindow) {
     });
 
     connect_dialog_callbacks(app, &controller);
+
+    let weak_app = app.as_weak();
+    let state = Rc::clone(&controller);
+    app.on_request_quit(move || {
+        if let Some(app) = weak_app.upgrade() {
+            request_pending(&app, &state, PendingAction::Quit);
+        }
+    });
 
     let weak_app = app.as_weak();
     let state = Rc::clone(&controller);
@@ -1466,6 +1481,7 @@ fn connect_dialog_callbacks(app: &AppWindow, controller: &Rc<RefCell<ProfileCont
             return;
         };
         let action = state.borrow_mut().dialog.take();
+        let retry = action.clone();
         match action {
             Some(DialogAction::SaveAs(after)) => {
                 let name = app.get_dialog_input().to_string();
@@ -1542,6 +1558,9 @@ fn connect_dialog_callbacks(app: &AppWindow, controller: &Rc<RefCell<ProfileCont
                 perform_import(&app, &state, &candidates, ImportConflictPolicy::KeepBoth);
             }
             None => dismiss_dialog(&app),
+        }
+        if app.get_dialog_open() && state.borrow().dialog.is_none() {
+            state.borrow_mut().dialog = retry;
         }
     });
 
@@ -1635,6 +1654,7 @@ fn execute_pending(
                     }
                     apply_loaded_profile(app, controller, profile);
                     app.set_profile_manager_open(false);
+                    app.invoke_restore_workspace_focus();
                     show_notice(app, &format!("Loaded '{name}'."));
                 }
                 Err(error) => show_error(app, &error.to_string()),
@@ -1651,10 +1671,16 @@ fn execute_pending(
             state.current_name = None;
             state.current_requires_upgrade = false;
             state.baseline = ProfileSnapshot::from_ui(app);
+            drop(state);
+            app.invoke_restore_workspace_focus();
         }
         PendingAction::Close => {
             save_window_preferences(app, &controller.borrow().store);
             let _ = app.hide();
+        }
+        PendingAction::Quit => {
+            save_window_preferences(app, &controller.borrow().store);
+            let _ = slint::quit_event_loop();
         }
     }
 }
@@ -1681,10 +1707,11 @@ fn begin_save(
             "",
         ),
         Some(_) => {
-            if save_current(app, controller, false)
-                && let Some(after) = after
-            {
-                execute_pending(app, controller, after);
+            if save_current(app, controller, false) {
+                dismiss_dialog(app);
+                if let Some(after) = after {
+                    execute_pending(app, controller, after);
+                }
             }
         }
     }
@@ -1890,6 +1917,7 @@ fn show_input_dialog(
     show_dialog(
         app, controller, action, title, message, primary, "CANCEL", "",
     );
+    app.set_dialog_input_visible(true);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1909,9 +1937,8 @@ fn show_dialog(
     app.set_dialog_primary_label(primary.into());
     app.set_dialog_secondary_label(secondary.into());
     app.set_dialog_tertiary_label(tertiary.into());
-    if app.get_dialog_input().is_empty() {
-        app.set_dialog_input_visible(false);
-    }
+    app.set_dialog_input_visible(false);
+    app.set_dialog_error("".into());
     app.set_dialog_open(true);
 }
 
@@ -1919,9 +1946,12 @@ fn dismiss_dialog(app: &AppWindow) {
     app.set_dialog_open(false);
     app.set_dialog_input_visible(false);
     app.set_dialog_input("".into());
+    app.set_dialog_error("".into());
+    app.invoke_restore_workspace_focus();
 }
 
 fn show_notice(app: &AppWindow, message: &str) {
+    app.set_overlay_notice(message.into());
     app.set_notice_is_error(false);
     app.set_notice_text(message.into());
 }
@@ -2096,6 +2126,10 @@ fn apply_completion_notice(app: &AppWindow, reason: Option<CompletionReason>) {
 }
 
 fn show_error(app: &AppWindow, message: &str) {
+    app.set_overlay_notice(message.into());
+    if app.get_dialog_open() {
+        app.set_dialog_error(message.into());
+    }
     app.set_session_active(false);
     app.set_session_paused(false);
     app.set_can_start(!app.get_draft_text().trim().is_empty());
@@ -2107,6 +2141,89 @@ fn show_error(app: &AppWindow, message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_actions_preserve_dialog_ownership_and_save_before_new() {
+        use autoquill::persistence::DataPaths;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        i_slint_backend_testing::init_no_event_loop();
+        let root = std::env::temp_dir().join(format!(
+            "autoquill-navigation-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let paths = DataPaths::from_root(&root);
+        let store = ProfileStore::new(paths.clone()).unwrap();
+        store
+            .save(
+                "Original",
+                &Profile::new("Original", TypingSettings::default(), "Saved"),
+            )
+            .unwrap();
+        let app = AppWindow::new().unwrap();
+        app.show().unwrap();
+        connect_profiles_with_store(&app, store);
+        app.invoke_open_profile_manager();
+        app.invoke_profile_selected(0);
+        app.invoke_profile_rename();
+        assert!(app.get_dialog_open());
+        assert!(app.get_dialog_input_visible());
+        app.set_dialog_input("bad/name".into());
+        app.invoke_dialog_primary();
+        assert!(
+            app.get_dialog_open(),
+            "Invalid names must keep the naming dialog open"
+        );
+        assert!(
+            !app.get_dialog_error().is_empty(),
+            "Validation errors belong inside the dialog"
+        );
+        app.set_dialog_input("Renamed".into());
+        app.invoke_dialog_primary();
+        assert!(!app.get_dialog_open(), "A corrected name can be retried");
+        assert!(app.get_profile_manager_open());
+        app.invoke_profile_load();
+        assert!(!app.get_profile_manager_open());
+        assert_eq!(app.get_draft_text().as_str(), "Saved");
+        app.set_draft_text("Edited before New".into());
+        app.invoke_open_profile_manager();
+        app.invoke_profile_new();
+        assert_eq!(app.get_dialog_title().as_str(), "Save your changes?");
+        app.invoke_dialog_primary();
+        assert!(
+            !app.get_dialog_open(),
+            "Saving an existing profile must dismiss the confirmation"
+        );
+        assert!(!app.get_profile_manager_open());
+        assert!(app.get_draft_text().is_empty());
+        let store = ProfileStore::new(paths).unwrap();
+        assert_eq!(
+            store.load("Renamed").unwrap().typing_text,
+            "Edited before New"
+        );
+        app.invoke_profile_save_as();
+        assert!(
+            app.get_dialog_input_visible(),
+            "A blank draft still needs a name input"
+        );
+        app.invoke_dialog_tertiary();
+        assert!(!app.get_dialog_open());
+        app.set_draft_text("Unsaved when exiting".into());
+        app.invoke_request_quit();
+        assert_eq!(app.get_dialog_title().as_str(), "Save your changes?");
+        app.invoke_dialog_tertiary();
+        assert_eq!(app.get_draft_text().as_str(), "Unsaved when exiting");
+    }
 
     #[test]
     fn counts_unicode_characters_and_whitespace_words() {

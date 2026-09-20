@@ -70,11 +70,13 @@ impl ForegroundBackend {
         if target.process_id == std::process::id() {
             return Err(NativeInputError::OwnWindow);
         }
-        Ok(ForegroundTarget::platform_foreground(
+        let mut captured = ForegroundTarget::platform_foreground(
             target.window as usize,
             target.process_id,
             target.label,
-        ))
+        );
+        captured.input_handle = target.focus as usize;
+        Ok(captured)
     }
 
     pub fn validate(&self, target: &ForegroundTarget) -> Result<(), NativeInputError> {
@@ -84,6 +86,7 @@ impl ForegroundBackend {
             .map_err(classify_validation_error)?;
         if active.window as usize != target.platform_handle()
             || active.process_id != target.platform_process_id()
+            || active.focus as usize != target.input_handle
         {
             return Err(NativeInputError::TargetChanged);
         }
@@ -205,11 +208,43 @@ impl X11TargetReader {
                 )
             })?;
 
+        let focus = self
+            .connection
+            .get_input_focus()
+            .map_err(x11_error)?
+            .reply()
+            .map_err(x11_error)?
+            .focus;
+        // The active top-level window alone does not identify the actual input destination.
+        // Reject root/PointerRoot focus and controls outside the captured application.
+        let mut ancestor = focus;
+        let mut belongs_to_target = false;
+        for _ in 0..64 {
+            if ancestor == window {
+                belongs_to_target = true;
+                break;
+            }
+            if ancestor <= 1 || ancestor == self.root {
+                break;
+            }
+            ancestor = self
+                .connection
+                .query_tree(ancestor)
+                .map_err(x11_error)?
+                .reply()
+                .map_err(x11_error)?
+                .parent;
+        }
+        if !belongs_to_target {
+            return Err(NativeInputError::TargetChanged);
+        }
+
         let label = self
             .window_label(window)
             .unwrap_or_else(|| format!("X11 window {window}"));
         Ok(X11Target {
             window,
+            focus,
             process_id,
             label,
         })
@@ -236,6 +271,7 @@ impl X11TargetReader {
 
 struct X11Target {
     window: Window,
+    focus: Window,
     process_id: u32,
     label: String,
 }
@@ -265,6 +301,109 @@ fn classify_validation_error(error: NativeInputError) -> NativeInputError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires an isolated Xvfb display; run by Linux packaging"]
+    fn x11_focus_changes_stop_delivery() {
+        use x11rb::{
+            COPY_DEPTH_FROM_PARENT, CURRENT_TIME,
+            protocol::xproto::{CreateWindowAux, InputFocus, PropMode, WindowClass},
+            wrapper::ConnectionExt as _,
+        };
+        assert_eq!(std::env::var("AUTOQUILL_X11_TEST").as_deref(), Ok("1"));
+        let reader = X11TargetReader::connect().unwrap();
+        let connection = &reader.connection;
+        let window = connection.generate_id().unwrap();
+        let first = connection.generate_id().unwrap();
+        let second = connection.generate_id().unwrap();
+        for (id, parent) in [(window, reader.root), (first, window), (second, window)] {
+            connection
+                .create_window(
+                    COPY_DEPTH_FROM_PARENT,
+                    id,
+                    parent,
+                    0,
+                    0,
+                    200,
+                    100,
+                    0,
+                    WindowClass::INPUT_OUTPUT,
+                    0,
+                    &CreateWindowAux::new(),
+                )
+                .unwrap()
+                .check()
+                .unwrap();
+            connection.map_window(id).unwrap().check().unwrap();
+        }
+        connection
+            .change_property32(
+                PropMode::REPLACE,
+                reader.root,
+                reader.active_window_atom,
+                AtomEnum::WINDOW,
+                &[window],
+            )
+            .unwrap()
+            .check()
+            .unwrap();
+        connection
+            .change_property32(
+                PropMode::REPLACE,
+                window,
+                reader.process_id_atom,
+                AtomEnum::CARDINAL,
+                &[std::process::id()],
+            )
+            .unwrap()
+            .check()
+            .unwrap();
+        connection
+            .set_input_focus(InputFocus::PARENT, first, CURRENT_TIME)
+            .unwrap()
+            .check()
+            .unwrap();
+        let active = reader.active_target().unwrap();
+        assert_eq!(active.focus, first);
+        let mut target =
+            ForegroundTarget::platform_foreground(window as usize, active.process_id, active.label);
+        target.input_handle = first as usize;
+        let backend = ForegroundBackend::default();
+        assert!(backend.validate(&target).is_ok());
+        // Focus can change inside the same top-level application without changing _NET_ACTIVE_WINDOW.
+        connection
+            .set_input_focus(InputFocus::PARENT, second, CURRENT_TIME)
+            .unwrap()
+            .check()
+            .unwrap();
+        assert_eq!(
+            backend.validate(&target),
+            Err(NativeInputError::TargetChanged)
+        );
+        assert_eq!(
+            backend.emit(&target, &PreviewOperation::CorrectionBackspace),
+            Err(NativeInputError::TargetChanged)
+        );
+        connection
+            .set_input_focus(InputFocus::POINTER_ROOT, reader.root, CURRENT_TIME)
+            .unwrap()
+            .check()
+            .unwrap();
+        assert_eq!(
+            backend.validate(&target),
+            Err(NativeInputError::TargetChanged)
+        );
+        connection
+            .delete_property(reader.root, reader.active_window_atom)
+            .unwrap()
+            .check()
+            .unwrap();
+        assert_eq!(
+            backend.validate(&target),
+            Err(NativeInputError::TargetClosed)
+        );
+        connection.destroy_window(window).unwrap().check().unwrap();
+    }
 
     #[test]
     fn only_missing_active_window_is_classified_as_closed() {

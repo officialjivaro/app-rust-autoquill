@@ -51,7 +51,7 @@ Platform support is deliberately capability-based:
 |---|---|---|---|---|
 | Windows x64 | Available | Available | Compatible controls | Verified beta |
 | macOS Universal 2 | Accessibility permission required | Unverified preview | Unavailable | Logical/native-runner QC only |
-| Linux X11 x64 | Unverified preview | Unverified preview | Unavailable | Logical/Xvfb/native-runner QC only |
+| Linux X11 x64 | Experimental beta | Experimental beta | Unavailable | Automated X11/native-runner QC; physical desktops unverified |
 | Linux Wayland | Simulation only | Unavailable | Unavailable | Portal work deferred |
 
 The macOS and Linux packages are produced as explicitly unverified previews. The macOS bundle is
@@ -63,6 +63,10 @@ support that the compositor may prohibit. See
 packaging boundary.
 
 ## Profiles
+
+Linux users: see the [Linux launch and typing guide](packaging/linux/README.md) for AppImage
+permissions, the FUSE fallback, desktop portal requirements, and X11/Wayland guidance. The
+AppImage targets Ubuntu 22.04 or newer and compatible x86_64 distributions.
 
 Open the profile manager from the profile button in the header. It supports search, load, save,
 Save As, rename, duplicate, default selection, export, and recoverable deletion. **Import Files**
@@ -94,6 +98,13 @@ backed up under `Data/Backups`. Deleted profiles move to `Data/Trash`.
 - Escape closes the topmost settings drawer, profile manager, confirmation, or dialog.
 - The tray provides Show, Start/Stop, and Exit when the desktop exposes a compatible tray host.
 - Copy/Export Diagnostics omits typed text, clipboard contents, profile names, and injected keys.
+
+The 0.19.0-beta.2 navigation pass names the profile launcher explicitly, keeps Settings labelled
+consistently, and preserves search/cursor and settings scroll state while a nested dialog is open.
+Profile-name dialogs focus the name field and show validation errors in place. Load/New return to
+the editor; temporary overlays and searches reset on relaunch while the existing last-profile,
+appearance, and window preferences are retained. Platform setup guidance is also available in
+Settings. See [the 0.19 audit record](docs/V019_UI_RELIABILITY.md).
 
 ## Prerequisites
 

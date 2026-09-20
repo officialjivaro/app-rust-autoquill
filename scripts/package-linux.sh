@@ -11,10 +11,11 @@ app_dir="$work_dir/AutoQuill.AppDir"
 tar_dir="$work_dir/AutoQuill-${version}-linux-x64"
 tool="$work_dir/linuxdeploy-x86_64.AppImage"
 icon_file="$work_dir/net.jivaro.autoquill.png"
-tool_sha256="421ca71d5c69ea97c6309276232990d43df1dcece0edfaa26bbf926ff96ed12e"
+tool_sha256="c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d"
 trap 'rm -rf "$work_dir"' EXIT
 
 test -x "$binary"
+AUTOQUILL_X11_TEST=1 XDG_SESSION_TYPE=x11 cargo test --locked --no-default-features --features renderer-software --lib x11_focus_changes_stop_delivery -- --ignored --test-threads=1
 if grep -aFq "$HOME" "$binary"; then
   echo "The Linux release contains the runner home path; rebuild it with path remapping." >&2
   exit 1
@@ -29,6 +30,8 @@ fi
 mkdir -p "$output_dir" "$app_dir/usr/bin" "$app_dir/usr/share/doc/autoquill" "$tar_dir"
 cp "$repo_root/THIRD_PARTY_NOTICES.md" "$app_dir/usr/share/doc/autoquill/THIRD_PARTY_NOTICES.md"
 cp "$repo_root/DEPENDENCY_LICENSES.md" "$app_dir/usr/share/doc/autoquill/DEPENDENCY_LICENSES.md"
+cp "$repo_root/packaging/linux/README.md" "$app_dir/usr/share/doc/autoquill/README.md"
+cp "$repo_root/packaging/linux/README.md" "$output_dir/README-linux.md"
 cp "$repo_root/THIRD_PARTY_NOTICES.md" "$output_dir/THIRD_PARTY_NOTICES.md"
 cp "$repo_root/DEPENDENCY_LICENSES.md" "$output_dir/DEPENDENCY_LICENSES.md"
 cp "$repo_root/assets/icon.png" "$icon_file"
@@ -39,10 +42,11 @@ chmod 755 "$raw"
 cp "$raw" "$tar_dir/AutoQuill"
 cp "$repo_root/THIRD_PARTY_NOTICES.md" "$tar_dir/THIRD_PARTY_NOTICES.md"
 cp "$repo_root/DEPENDENCY_LICENSES.md" "$tar_dir/DEPENDENCY_LICENSES.md"
+cp "$repo_root/packaging/linux/README.md" "$tar_dir/README.md"
 tar -C "$work_dir" -czf "$output_dir/AutoQuill-${version}-linux-x64.tar.gz" "$(basename "$tar_dir")"
 
 curl --fail --location --retry 3 --silent --show-error \
-  https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+  https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage \
   --output "$tool"
 printf '%s  %s\n' "$tool_sha256" "$tool" | sha256sum --check --strict
 chmod 755 "$tool"

@@ -47,6 +47,24 @@
         "macOS and Linux are unverified previews rather than physically tested releases",
         "Linux Real Typing is experimental on X11; Wayland remains Simulation-only"
       ]
+    },
+    "0.19.0-beta.2": {
+      "date": "2026-09-20",
+      "title": "Navigation and Linux reliability beta",
+      "summary": "Improves profile workflows, dialog focus and recovery, unsaved-change handling, and Linux X11 target validation.",
+      "changes": [
+        "Fixed profile actions, naming-dialog focus, and compact dialog sizing",
+        "Kept validation errors visible and failed actions ready to retry",
+        "Preserved parent-overlay state and returned focus after profile actions",
+        "Added unsaved-change confirmation when exiting from the tray",
+        "Strengthened Linux X11 focused-target checks and added a Linux launch guide"
+      ],
+      "limitations": [
+        "All platform packages remain unsigned beta builds",
+        "macOS and Linux are unverified previews rather than physically tested releases",
+        "The macOS package is unsigned and unnotarized",
+        "Linux Real Typing is experimental on X11; Wayland remains Simulation-only"
+      ]
     }
   }
 }

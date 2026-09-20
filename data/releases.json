@@ -11,8 +11,105 @@
     "sort": "semantic-version-descending"
   },
   "generatedFrom": "dist/builds",
-  "updated": "2026-08-29",
+  "updated": "2026-09-20",
   "releases": [
+    {
+      "version": "0.19.0-beta.2",
+      "channel": "beta",
+      "date": "2026-09-20",
+      "title": "Navigation and Linux reliability beta",
+      "summary": "Improves profile workflows, dialog focus and recovery, unsaved-change handling, and Linux X11 target validation.",
+      "changes": [
+        "Fixed profile actions, naming-dialog focus, and compact dialog sizing",
+        "Kept validation errors visible and failed actions ready to retry",
+        "Preserved parent-overlay state and returned focus after profile actions",
+        "Added unsaved-change confirmation when exiting from the tray",
+        "Strengthened Linux X11 focused-target checks and added a Linux launch guide"
+      ],
+      "limitations": [
+        "All platform packages remain unsigned beta builds",
+        "macOS and Linux are unverified previews rather than physically tested releases",
+        "The macOS package is unsigned and unnotarized",
+        "Linux Real Typing is experimental on X11; Wayland remains Simulation-only"
+      ],
+      "tag": "v0.19.0-beta.2",
+      "releaseUrl": "https://github.com/officialjivaro/app-rust-autoquill/releases/tag/v0.19.0-beta.2",
+      "archivedUtc": "2026-09-20T15:18:19.0388533Z",
+      "platforms": [
+        {
+          "id": "windows-x64",
+          "name": "Windows",
+          "architecture": "x64",
+          "status": "available",
+          "verification": "local-and-native-runner",
+          "artifacts": [
+            {
+              "name": "AutoQuill-0.19.0-beta.2-windows-x64.exe",
+              "format": "EXE",
+              "bytes": 10255872,
+              "sha256": "e14304e67f0b1ee4d506fb301b3205f8774605b513fef85109e48b3ee29260aa",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-windows-x64.exe"
+            }
+          ],
+          "signed": false
+        },
+        {
+          "id": "linux-x64",
+          "name": "Linux",
+          "architecture": "x64",
+          "status": "available",
+          "verification": "logical-xvfb-and-native-runner-only",
+          "artifacts": [
+            {
+              "name": "AutoQuill-0.19.0-beta.2-linux-x64",
+              "format": "binary",
+              "bytes": 14891440,
+              "sha256": "2eb5109c87f3c850d0c9c6415df208140401bb62a0210962e8aa49d8bf89338e",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-linux-x64"
+            },
+            {
+              "name": "AutoQuill-0.19.0-beta.2-linux-x64.tar.gz",
+              "format": "tar.gz",
+              "bytes": 7125895,
+              "sha256": "cb651a913e39719310768d33e84a750e54e8def403a35eea477b5c36afaccf27",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-linux-x64.tar.gz"
+            },
+            {
+              "name": "AutoQuill-0.19.0-beta.2-linux-x64.AppImage",
+              "format": "AppImage",
+              "bytes": 8227320,
+              "sha256": "45f84bce938552922e26cf8ca160ebc845159a5e7aa43ae0fa52c5f0fd07bb47",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-linux-x64.AppImage"
+            }
+          ],
+          "wayland": "simulation-only"
+        },
+        {
+          "id": "macos-universal2",
+          "name": "macOS",
+          "architecture": "Universal 2",
+          "status": "available",
+          "verification": "logical-and-native-runner-only",
+          "artifacts": [
+            {
+              "name": "AutoQuill-0.19.0-beta.2-macos-universal2-unsigned.zip",
+              "format": "ZIP",
+              "bytes": 12380868,
+              "sha256": "abdd2a0b9d9e19d8e2c5e6f9d1fda6d04cb52c8364aabe189aa950c979f082d9",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-macos-universal2-unsigned.zip"
+            },
+            {
+              "name": "AutoQuill-0.19.0-beta.2-macos-universal2-unsigned.dmg",
+              "format": "DMG",
+              "bytes": 14839418,
+              "sha256": "b3362cad6ae324b855bff8994332f4febc297ca67669d901c80c8d496993dbc5",
+              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.19.0-beta.2/AutoQuill-0.19.0-beta.2-macos-universal2-unsigned.dmg"
+            }
+          ],
+          "signed": false
+        }
+      ]
+    },
     {
       "version": "0.19.0-beta.1",
       "channel": "beta",
@@ -200,59 +297,6 @@
             }
           ],
           "signed": false
-        }
-      ]
-    },
-    {
-      "version": "0.17.0-beta.1",
-      "channel": "beta",
-      "date": "2026-08-24",
-      "title": "Cross-platform capability beta",
-      "summary": "Introduces capability-aware Windows, macOS, Linux X11, and Linux Wayland behavior while keeping unsupported input paths visibly disabled.",
-      "changes": [
-        "Added shared runtime capability reporting across supported desktop environments",
-        "Added macOS Accessibility permission checks and foreground-input support",
-        "Added Linux session detection and X11 foreground-input support",
-        "Kept Wayland in Simulation mode where unrestricted input is unavailable"
-      ],
-      "limitations": [
-        "Only the Windows x64 package was published for this build",
-        "The Windows executable is unsigned"
-      ],
-      "tag": "v0.17.0-beta.1",
-      "releaseUrl": "https://github.com/officialjivaro/app-rust-autoquill/releases/tag/v0.17.0-beta.1",
-      "archivedUtc": "2026-08-25T12:50:04.1998199Z",
-      "platforms": [
-        {
-          "id": "windows-x64",
-          "name": "Windows",
-          "architecture": "x64",
-          "status": "available",
-          "verification": "local-windows-release",
-          "signed": false,
-          "artifacts": [
-            {
-              "name": "AutoQuill-0.17.0-beta.1-windows-x64.exe",
-              "format": "EXE",
-              "bytes": 9844224,
-              "sha256": "1464527c2ff388a835256934b76c17ca0dd25cfe245026e62684bba981cc2692",
-              "url": "https://github.com/officialjivaro/app-rust-autoquill/releases/download/v0.17.0-beta.1/AutoQuill-0.17.0-beta.1-windows-x64.exe"
-            }
-          ]
-        },
-        {
-          "id": "linux-x64",
-          "name": "Linux",
-          "architecture": "x64",
-          "status": "coming-soon",
-          "artifacts": []
-        },
-        {
-          "id": "macos-universal2",
-          "name": "macOS",
-          "architecture": "Universal 2",
-          "status": "coming-soon",
-          "artifacts": []
         }
       ]
     }
